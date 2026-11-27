@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/hook", "destination": "/api/hook" }]
+  "rewrites": [
+    { "source": "/hook", "destination": "/api/hook" },
+    { "source": "/admin", "destination": "/admin.html" }
+  ]
 }

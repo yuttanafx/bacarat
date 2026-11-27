@@ -125,12 +125,19 @@ dialog#cfgDlg h2{margin:0 0 12px}
 .gameSw button[aria-pressed="true"]{background:var(--green);color:#fff}
 body:not(.dt) .dtOnly{display:none}
 body.dt .bacOnly{display:none}
+
+dialog#loginDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:20px;width:min(380px,92vw)}
+dialog#loginDlg::backdrop{background:rgba(0,0,0,.6)}
+dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+.authBar{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:.85rem}
+.authBar button{padding:5px 12px}
 </style>
 </head>
 <body>
 <header class="topbar" id="topbar">
   <button id="menuBtn" aria-label="เปิดเมนู" aria-expanded="false" aria-controls="drawer">☰</button>
   <div><b>Baccarat Simulator</b> <span id="pageTitle"></span></div>
+  <div class="authBar"><span id="authName" class="note"></span><button id="authBtn" class="ghost" type="button">เข้าสู่ระบบ</button></div>
 </header>
 <dialog id="cfgDlg" aria-labelledby="cfgTitle">
   <h2 id="cfgTitle">ตั้งค่ากลยุทธ์และยอดเงิน</h2>
@@ -168,6 +175,19 @@ body.dt .bacOnly{display:none}
     <button id="cfgOk" style="background:var(--green)">ตกลง</button>
     <button id="cfgCancel" class="ghost">ยกเลิก</button>
   </div>
+</dialog>
+<dialog id="loginDlg" aria-labelledby="loginTitle">
+  <form method="dialog" id="loginForm" autocomplete="on">
+    <h2 id="loginTitle">เข้าสู่ระบบ</h2>
+    <p class="note" style="margin:0 0 10px">ต้องเข้าสู่ระบบสมาชิกก่อนจึงจะกรอกข้อมูลได้</p>
+    <label for="loginUser">ชื่อผู้ใช้</label><input id="loginUser" name="username" autocomplete="username" required>
+    <label for="loginPass" style="margin-top:8px">รหัสผ่าน</label><input id="loginPass" name="password" type="password" autocomplete="current-password" required>
+    <p id="loginErr" role="alert"></p>
+    <div class="btns" style="margin:12px 0 0">
+      <button id="loginGo" type="submit" style="background:var(--green)">เข้าสู่ระบบ</button>
+      <button id="loginCancel" type="button" class="ghost">ยกเลิก</button>
+    </div>
+  </form>
 </dialog>
 <div id="scrim"></div>
 <nav id="drawer" aria-label="เมนูหน้า" aria-hidden="true">
@@ -1980,15 +2000,56 @@ document.querySelectorAll(".gameBtn").forEach(b => {
 });
 if (GAME === "dt") {
   document.title = gameText(document.title);
+  const keepLabel = n => !!(n.parentNode && n.parentNode.closest && n.parentNode.closest(".gameSw")); // ปุ่มเลือกเกมต้องคงชื่อ "บาคาร่า" / "เสือมังกร" ไว้
   const relabel = root => {
-    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => /^(SCRIPT|STYLE|TEXTAREA)$/.test(n.parentNode.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => /^(SCRIPT|STYLE|TEXTAREA)$/.test(n.parentNode.nodeName) || keepLabel(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     for (let n = w.nextNode(); n; n = w.nextNode()) { const t = gameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
   };
   relabel(document.body);
-  new MutationObserver(ms => { for (const m of ms) { if (m.type === "characterData") { const t = gameText(m.target.nodeValue); if (t !== m.target.nodeValue) m.target.nodeValue = t; } else m.addedNodes.forEach(n => { if (n.nodeType === 3) { const t = gameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; } else if (n.nodeType === 1) relabel(n); }); } })
+  new MutationObserver(ms => { for (const m of ms) { if (m.type === "characterData") { if (keepLabel(m.target)) continue; const t = gameText(m.target.nodeValue); if (t !== m.target.nodeValue) m.target.nodeValue = t; } else m.addedNodes.forEach(n => { if (n.nodeType === 3) { if (keepLabel(n)) return; const t = gameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; } else if (n.nodeType === 1) relabel(n); }); } })
     .observe(document.body, { childList: true, subtree: true, characterData: true });
   document.querySelectorAll("[placeholder]").forEach(el => { el.placeholder = gameText(el.placeholder); });
 }
+/* ---------- ล็อกอินสมาชิก: ต้องล็อกอินก่อนกรอก/แก้ข้อมูลใน Data Lab ---------- */
+(() => {
+  const KEY = "bacc_session", GATED = "#addB,#addP,#addT,#undo,#appendData,#replaceData,#importFile,#clearData";
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } };
+  const tokExp = t => { try { return JSON.parse(atob(t.split(".")[0].replace(/-/g, "+").replace(/_/g, "/"))).exp; } catch { return 0; } };
+  const valid = () => { const s = read(); return !!(s && s.token && tokExp(s.token) > Date.now()); };
+  const clear = () => { try { localStorage.removeItem(KEY); } catch {} paint(); };
+  const paint = () => { const s = read(), ok = valid(); $("authName").textContent = ok ? s.user.name || s.user.username : ""; $("authBtn").textContent = ok ? "ออกจากระบบ" : "เข้าสู่ระบบ"; };
+  let pending = null, bypass = false;
+  const dlg = $("loginDlg");
+  const openLogin = btn => { pending = btn || null; $("loginErr").textContent = ""; $("loginPass").value = ""; if (!dlg.open) dlg.showModal(); setTimeout(() => $("loginUser").focus(), 30); };
+
+  document.addEventListener("click", e => {
+    if (bypass) return;
+    const b = e.target.closest && e.target.closest(GATED);
+    if (b && !valid()) { e.preventDefault(); e.stopImmediatePropagation(); openLogin(b); }
+  }, true);
+
+  $("authBtn").onclick = () => { if (valid()) { clear(); } else openLogin(null); };
+  $("loginCancel").onclick = () => dlg.close();
+  $("loginForm").onsubmit = async e => {
+    e.preventDefault();
+    const err = $("loginErr"), go = $("loginGo"); err.textContent = ""; go.disabled = true;
+    try {
+      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: $("loginUser").value.trim(), password: $("loginPass").value }) });
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok) { err.textContent = j.error || "เข้าสู่ระบบไม่สำเร็จ"; return; }
+      try { localStorage.setItem(KEY, JSON.stringify({ token: j.token, user: j.user })); } catch {}
+      paint(); dlg.close();
+      const b = pending; pending = null;
+      if (b && b.id !== "clearData" && b.id !== "replaceData") { bypass = true; try { b.click(); } finally { bypass = false; } } // ทำคำสั่งที่ค้างไว้ต่อให้ (ข้ามคำสั่งที่ทำลายข้อมูล ให้กดซ้ำเอง)
+    } catch { err.textContent = "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"; }
+    finally { go.disabled = false; }
+  };
+  // ตรวจกับเซิร์ฟเวอร์ตอนเปิดหน้า: บัญชีถูกปิด/หมดอายุ = ต้องล็อกอินใหม่
+  paint();
+  const s = read();
+  if (s && s.token) fetch("/api/me", { headers: { Authorization: "Bearer " + s.token } }).then(r => { if (r.status === 401) clear(); }).catch(() => {});
+})();
 </script>
 </body>
 </html>
