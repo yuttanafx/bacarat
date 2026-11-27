@@ -51,9 +51,47 @@ th:first-child,td:first-child{text-align:left}
 th{color:var(--muted);font-weight:600}
 .seq{font-family:ui-monospace,Consolas,monospace;word-break:break-all;background:var(--panel2);border-radius:6px;padding:8px;font-size:.85rem;max-height:90px;overflow:auto}
 .verdict{background:var(--panel2);border-left:4px solid var(--amber);border-radius:6px;padding:8px 12px;margin:10px 0;font-size:.9rem}
-#aiOut{white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:12px;margin-top:10px;font-size:.9rem;min-height:2em}
+#aiOut,#aiPatOut,#hookStatus{white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:12px;margin-top:10px;font-size:.9rem;min-height:2em}
+
+@property --c{syntax:"<color>";inherits:true;initial-value:#d6455a}
+.ball{--c:var(--red);transition:--c .3s ease;width:26px;height:26px;border-radius:50%;flex:none;color:#fff;font-size:.7rem;font-weight:800;display:grid;place-items:center;
+  background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.8),rgba(255,255,255,0) 40%),var(--c);
+  box-shadow:inset 0 -4px 6px rgba(0,0,0,.28),0 2px 5px rgba(0,0,0,.25)}
+.ball.B{--c:var(--red)}.ball.P{--c:var(--blue)}.ball.T{--c:var(--green)}
+.ball.sm{width:22px;height:22px;font-size:.65rem;display:inline-grid;vertical-align:middle}
+.bead{display:grid;grid-template-rows:repeat(6,28px);grid-auto-flow:column;grid-auto-columns:28px;gap:3px;overflow-x:auto;padding:8px;background:var(--panel2);border-radius:10px;min-height:196px;align-content:start}
+.ball.new{animation:drop .6s cubic-bezier(.3,1.6,.5,1)}
+@keyframes drop{0%{transform:translateY(-46px) scale(.5);opacity:0}55%{opacity:1}100%{transform:none}}
+.ball.ghost{background:transparent;box-shadow:none;border:2px dashed var(--c);color:var(--c);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.2);opacity:.55}}
+.legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:6px 0 0}
+.legend .ball{width:12px;height:12px;box-shadow:none;display:inline-block;vertical-align:middle;margin-right:4px}
+.heroWrap{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin:8px 0 10px}
+.hero{position:relative;width:160px;height:160px;flex:none}
+.hero svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.arc{transition:stroke .3s ease}.arc.B{stroke:var(--red)}.arc.P{stroke:var(--blue)}
+.hero .ball.big{position:absolute;inset:21px;width:auto;height:auto;font-size:3rem;box-shadow:inset 0 -10px 14px rgba(0,0,0,.28),0 8px 16px rgba(0,0,0,.28);animation:float 3.2s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-5px)}}
+.hero.play .arc{animation:fill 1.3s cubic-bezier(.2,.8,.2,1) .35s backwards}
+@keyframes fill{from{stroke-dashoffset:427.3}}
+.hero.play .ball.big{animation:roll .95s cubic-bezier(.2,.9,.3,1.15),float 3.2s ease-in-out .95s infinite}
+@keyframes roll{0%{transform:translateX(-170px) rotate(-540deg) scale(.55);opacity:0}65%{opacity:1}100%{transform:none}}
+.heroTxt b{font-size:1.4rem;display:block}
+.heroTxt span{font-size:.85rem;color:var(--muted)}
+.scrollY{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.scrollY thead th{position:sticky;top:0;background:var(--panel)}
+.bump{animation:bump .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bump{0%{transform:scale(.8);opacity:.3}100%{transform:none;opacity:1}}
+.chip{display:inline-flex;gap:6px;align-items:center}
+.mini{flex:none!important;padding:3px 9px!important;font-size:.75rem!important;border-radius:6px!important}
+.hl td{background:rgba(245,165,36,.16)}
+.ctx{display:inline-flex;gap:2px;vertical-align:middle}
+.coin{display:inline-grid;place-items:center;min-width:44px;height:44px;padding:0 6px;border-radius:50%;font-weight:800;color:#4a2f00;font-variant-numeric:tabular-nums;
+  background:radial-gradient(circle at 32% 26%,#fff3c4,#f5c842 45%,#c98a0a);border:2px dashed rgba(74,47,0,.45);
+  box-shadow:inset 0 -4px 6px rgba(0,0,0,.25),0 2px 5px rgba(0,0,0,.3)}
+.betline{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:.85rem;color:var(--muted)}
 @media (max-width:520px){.grid{grid-template-columns:1fr}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -82,8 +120,68 @@ th{color:var(--muted);font-weight:600}
     </div>
     <input type="file" id="fileIn" accept=".txt,.csv,.json" hidden>
     <div id="dataInfo" class="note"></div>
-    <div class="seq" id="seqView" aria-label="ข้อมูลล่าสุด"></div>
+    <div class="bead" id="seqView" aria-label="ผลล่าสุดเรียงเป็นลูก"></div>
+    <p class="legend note"><span><i class="ball B"></i>Banker</span><span><i class="ball P"></i>Player</span><span><i class="ball T"></i>Tie</span><span>วงประ = คาดการณ์ตาถัดไป</span></p>
+    <div style="max-width:260px;margin-top:10px">
+      <label for="minN">แสดงคาดการณ์เมื่อมีข้อมูลอย่างน้อย</label>
+      <select id="minN">
+        <option value="10">10 ตา</option>
+        <option value="20">20 ตา</option>
+        <option value="30" selected>30 ตา</option>
+      </select>
+    </div>
+    <div id="predict"></div>
     <div id="analysis"></div>
+  </section>
+
+  <section class="panel" id="boardsPanel">
+    <h2>กระดานและชุดข้อมูล</h2>
+    <p class="note">1 กระดาน = ผลที่ออกต่อเนื่องในโต๊ะหรือสำรับเดียว (เช่น 50 ตา) กรอกผลใน Data Lab ด้านบน ครบแล้วกด "จบกระดาน" ระบบเก็บเข้าฐานข้อมูลและเริ่มกระดานใหม่ให้ แยกกระดานเพื่อไม่ให้รูปแบบข้ามจากกระดานหนึ่งไปอีกกระดาน</p>
+    <div class="grid">
+      <div><label for="boardName">ชื่อกระดาน</label><input id="boardName" placeholder="เช่น โต๊ะ A รอบ 1"></div>
+      <div><label for="boardTag">รูปแบบ / แท็ก</label><input id="boardTag" list="tagList" placeholder="เช่น ห้อง 3, ออนไลน์"><datalist id="tagList"></datalist></div>
+      <div><label for="boardTarget">เป้าจำนวนตาต่อกระดาน</label><input id="boardTarget" type="number" min="1" value="50"></div>
+      <div style="align-self:end"><label style="font-weight:400"><input type="checkbox" id="autoEnd"> จบกระดานอัตโนมัติเมื่อครบเป้า</label></div>
+    </div>
+    <progress id="boardProg" value="0" max="50" style="margin-top:12px"></progress>
+    <div id="boardInfo" class="note"></div>
+    <div class="row"><button id="endBoard">จบกระดาน (บันทึกเข้าฐานข้อมูล)</button></div>
+
+    <h3>กระดานที่บันทึกไว้</h3>
+    <div style="max-width:300px"><label for="tagFilter">ดูเฉพาะรูปแบบ</label><select id="tagFilter"><option value="">ทั้งหมด</option></select></div>
+    <div id="boardList"></div>
+    <h3>สำรองข้อมูลและย้ายเครื่อง</h3>
+    <p class="note">ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ถ้าจะเปลี่ยนเครื่องหรือเปลี่ยนเบราว์เซอร์ ให้ดาวน์โหลดไฟล์สำรองแล้วนำไปกู้คืนในเครื่องใหม่ ไฟล์สำรองมีทุกกระดาน กระดานปัจจุบัน และค่าตั้งต้น ไม่รวม API key และ Webhook URL เพื่อความปลอดภัย</p>
+    <div style="max-width:340px"><label for="restoreMode">วิธีกู้คืน</label>
+      <select id="restoreMode">
+        <option value="merge" selected>รวมกับข้อมูลเดิม (ข้ามกระดานที่ซ้ำ)</option>
+        <option value="replace">แทนที่ข้อมูลเดิมทั้งหมด (รวมค่าตั้งต้น)</option>
+      </select></div>
+    <div class="row">
+      <button class="ghost" id="exportBoards">ดาวน์โหลดไฟล์สำรองทั้งหมด</button>
+      <button class="ghost" id="importBoards">กู้คืนจากไฟล์สำรอง</button>
+    </div>
+    <input type="file" id="boardFile" accept=".json,application/json" hidden>
+    <div id="backupStatus" class="note" aria-live="polite"></div>
+    <div id="tagSummary"></div>
+
+    <h3>วิเคราะห์รูปแบบข้ามกระดาน</h3>
+    <div style="max-width:300px"><label for="kSel">ดูย้อนหลังกี่ตาเป็น 1 รูปแบบ</label>
+      <select id="kSel"><option value="1">1 ตา</option><option value="2">2 ตา</option><option value="3" selected>3 ตา</option><option value="4">4 ตา</option><option value="5">5 ตา</option></select></div>
+    <div id="patternOut"></div>
+    <div class="row"><button id="aiPattern">ให้ AI ตรวจรูปแบบ</button></div>
+    <div id="aiPatOut" aria-live="polite"></div>
+
+    <h3>Webhook (ส่งข้อมูลออกไปให้ระบบอื่น)</h3>
+    <p class="note">เมื่อจบกระดาน ระบบ POST ข้อมูลเป็น JSON ไปยัง URL ที่ตั้งไว้ เช่น n8n, Make, Zapier หรือเซิร์ฟเวอร์ของคุณ เพื่อให้ฝั่งนั้นเก็บลงฐานข้อมูลและเรียก AI API ตรวจต่อได้ หน้าเว็บไฟล์เดียวนี้เปิดให้ระบบอื่นเข้ามาดึงข้อมูลเองไม่ได้ จึงใช้วิธีส่งออกแทน</p>
+    <label for="hookUrl">Webhook URL</label>
+    <input id="hookUrl" type="url" placeholder="https://…">
+    <label style="margin-top:8px;font-weight:400"><input type="checkbox" id="hookAuto"> ส่งอัตโนมัติทุกครั้งที่จบกระดาน</label>
+    <div class="row">
+      <button class="ghost" id="hookTest">ส่งทดสอบ</button>
+      <button class="ghost" id="hookAll">ส่งทุกกระดานที่เลือกอยู่</button>
+    </div>
+    <div id="hookStatus" class="note"></div>
   </section>
 
   <section class="panel">
@@ -118,6 +216,19 @@ th{color:var(--muted);font-weight:600}
           <option value="replay">เล่นซ้ำข้อมูลจริงตามลำดับ (backtest)</option>
         </select></div>
     </div>
+  </section>
+
+  <section class="panel" id="livePanel">
+    <h2>ยอดเงินและเดิมพันแบบสด</h2>
+    <p class="note">เปลี่ยนค่าด้านบนแล้วตารางนี้อัปเดตทันที และเดินตามผลจริงที่กรอกใน Data Lab ด้วยกลยุทธ์และฝั่งที่เลือก</p>
+    <div style="max-width:300px;margin-bottom:10px">
+      <label for="liveSide">ฝั่งที่แทงในตารางนี้</label>
+      <select id="liveSide">
+        <option value="predict" selected>ตามคาดการณ์ของระบบ</option>
+        <option value="setting">ตามช่อง "ฝั่งที่แทง" ด้านบน</option>
+      </select>
+    </div>
+    <div id="live"></div>
   </section>
 
   <div class="btns">
@@ -354,8 +465,10 @@ let lastAnalysis = null, lastSummary = "";
 function renderData(){
   const n = data.length;
   $("dataInfo").textContent = n ? `ข้อมูลทั้งหมด ${n} ตา` : "ยังไม่มีข้อมูล เพิ่มผลทีละตาหรือวางข้อมูลด้านบน";
-  $("seqView").textContent = n ? data.slice(-300).join(" ") + (n > 300 ? "  (แสดง 300 ตาล่าสุด)" : "") : "—";
   $("undo").disabled = !n;
+  renderPredict();
+  renderLive();
+  renderBoards();
   const box = $("analysis");
   if (n < 10) { lastAnalysis = null; box.innerHTML = n ? '<p class="note">ต้องมีข้อมูลอย่างน้อย 10 ตาเพื่อวิเคราะห์ (แนะนำ 500+ ตา)</p>' : ""; return; }
   const a = analyze(n ? data : []);
@@ -390,6 +503,7 @@ function renderData(){
 function addResults(arr){
   if (!arr.length) { alert("ไม่พบข้อมูลที่อ่านได้ (ใช้ B, P, T หรือ เจ้ามือ/ผู้เล่น/เสมอ)"); return; }
   data = data.concat(arr); saveData(); renderData();
+  if (meta.auto && data.length >= (meta.target || 50)) finishBoard(true);
 }
 $("addB").onclick = () => addResults(["B"]);
 $("addP").onclick = () => addResults(["P"]);
@@ -416,6 +530,476 @@ $("exportData").onclick = () => {
   a.href = URL.createObjectURL(new Blob([JSON.stringify({ exported: new Date().toISOString(), count: data.length, results: data })], { type: "application/json" }));
   a.download = "baccarat_data.json"; a.click(); URL.revokeObjectURL(a.href);
 };
+
+/* ---------- Next-hand prediction ---------- */
+const nonTie = d => d.filter(x => x !== "T");
+const laplace = (k, n) => (k + 1) / (n + 2);
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+// แต่ละวิธีคืนค่า P(ตาถัดไปเป็น Banker) จากลำดับที่ไม่นับ Tie
+const METHODS = [
+  { name: "ค่าเฉลี่ยทั้งหมด", f: s => laplace(s.filter(x => x === "B").length, s.length) },
+  { name: "ค่าเฉลี่ย 20 ตาล่าสุด", f: s => { const w = s.slice(-20); return laplace(w.filter(x => x === "B").length, w.length); } },
+  { name: "ตามผลตาก่อนหน้า", f: s => {
+      const last = s[s.length - 1]; let t = 0, b = 0;
+      for (let i = 1; i < s.length; i++) if (s[i - 1] === last) { t++; if (s[i] === "B") b++; }
+      return laplace(b, t);
+  } },
+  { name: "ตามความยาวที่ออกซ้ำ", f: s => {
+      const last = s[s.length - 1];
+      let cur = 1; for (let i = s.length - 1; i > 0 && s[i] === s[i - 1]; i--) cur++;
+      const K = Math.min(cur, 5);
+      let run = 1, t = 0, same = 0;
+      for (let i = 1; i < s.length; i++) {
+        if (Math.min(run, 5) === K) { t++; if (s[i] === s[i - 1]) same++; }
+        run = s[i] === s[i - 1] ? run + 1 : 1;
+      }
+      const ps = laplace(same, t);
+      return last === "B" ? ps : 1 - ps;
+  } },
+];
+
+function predictAll(s){
+  const each = METHODS.map(m => ({ name: m.name, p: m.f(s) }));
+  return { each, pB: each.reduce((a, x) => a + x.p, 0) / each.length };
+}
+
+// walk-forward backtest: ทำนายทีละตาโดยใช้เฉพาะข้อมูลก่อนหน้า
+function backtest(s){
+  const start = Math.max(Math.min(15, minN()), s.length - 1500);
+  const rows = METHODS.map(m => ({ name: m.name, hit: 0 }));
+  const comb = { name: "รวมทุกวิธี", hit: 0 }, base = { name: "แทง Banker ทุกตา (อ้างอิง)", hit: 0 };
+  let n = 0;
+  for (let i = start; i < s.length; i++) {
+    const h = s.slice(0, i), ps = METHODS.map(m => m.f(h));
+    ps.forEach((p, j) => { if ((p >= 0.5 ? "B" : "P") === s[i]) rows[j].hit++; });
+    const pc2 = ps.reduce((a, b) => a + b, 0) / ps.length;
+    if ((pc2 >= 0.5 ? "B" : "P") === s[i]) comb.hit++;
+    if (s[i] === "B") base.hit++;
+    n++;
+  }
+  return { n, rows: [...rows, comb, base], comb, base };
+}
+
+function spinColor(final){
+  const hero = document.querySelector("#predict .hero");
+  if (!hero) return;
+  const els = [hero.querySelector(".ball.big"), hero.querySelector(".arc"), document.querySelector("#seqView .ball.ghost")].filter(Boolean);
+  const N = 7, seq = Array.from({ length: N }, (_, k) => ((N - 1 - k) % 2 === 0) ? final : (final === "B" ? "P" : "B"));
+  let at = 350;
+  seq.forEach((c, k) => {
+    at += 110 + k * 25;
+    setTimeout(() => {
+      if (!hero.isConnected) return;
+      els.forEach(el => {
+        el.classList.remove("B", "P"); el.classList.add(c);
+        if (el.classList.contains("ball")) el.textContent = el.classList.contains("ghost") ? "?" : c;
+      });
+    }, at);
+  });
+}
+let ghostPick = null, lastBeadN = -1, lastRevealN = -1;
+function renderBead(){
+  const el = $("seqView"), n = data.length;
+  if (!n) { el.innerHTML = '<span class="note" style="grid-row:1/-1;grid-column:1/-1;white-space:nowrap">ยังไม่มีข้อมูล</span>'; lastBeadN = 0; return; }
+  const from = Math.max(0, n - 240), grew = lastBeadN >= 0 && n > lastBeadN;
+  let h = "";
+  for (let i = from; i < n; i++) h += `<span class="ball ${data[i]}${grew && i === n - 1 ? " new" : ""}">${data[i]}</span>`;
+  if (ghostPick) h += `<span class="ball ghost ${ghostPick}" title="คาดการณ์ตาถัดไป">?</span>`;
+  el.innerHTML = h; el.scrollLeft = el.scrollWidth; lastBeadN = n;
+}
+const minN = () => parseInt($("minN").value, 10) || 30;
+let aiPred = null; // { n, pick, prob, reason, err }
+
+function renderPredict(){
+  const box = $("predict"), n = data.length, s = nonTie(data);
+  if (n < minN() || s.length < 5) {
+    box.innerHTML = `<h3>คาดการณ์ตาถัดไป</h3><p class="note">ต้องมีข้อมูลอย่างน้อย ${minN()} ตา (ตอนนี้ ${n}) จึงจะแสดงคาดการณ์</p>`;
+    ghostPick = null; lastRevealN = -1; renderBead();
+    return;
+  }
+  const r = predictAll(s);
+  const pick = r.pB >= 0.5 ? "B" : "P", pp = pick === "B" ? r.pB : 1 - r.pB;
+  const near = Math.abs(r.pB - 0.5) < 0.03;
+  const eachRows = r.each.map(x => `<tr><td>${x.name}</td><td><span class="ball sm ${x.p >= 0.5 ? "B" : "P"}">${x.p >= 0.5 ? "B" : "P"}</span></td><td>${pc(x.p >= 0.5 ? x.p : 1 - x.p)}</td></tr>`).join("");
+
+  let btHtml = "", btText = "";
+  if (s.length >= minN() + 10) {
+    const bt = backtest(s), ci = 1.96 * Math.sqrt(0.25 / bt.n);
+    const body = bt.rows.map(x => `<tr><td>${x.name}</td><td>${pc(x.hit / bt.n)}</td></tr>`).join("");
+    const diff = bt.comb.hit / bt.n - bt.base.hit / bt.n;
+    const verdict = Math.abs(diff) <= ci * Math.SQRT2
+      ? "ความแม่นของวิธีรวมไม่ต่างจากการแทง Banker ทุกตาอย่างมีนัยสำคัญ แปลว่ายังไม่มีหลักฐานว่าการคาดการณ์จากประวัติได้ผล"
+      : diff > 0
+        ? "ความแม่นสูงกว่าอ้างอิง แต่ลองหลายวิธีบนข้อมูลชุดเดียว อาจเป็นความบังเอิญ ควรเก็บข้อมูลใหม่มาทดสอบซ้ำ"
+        : "ความแม่นต่ำกว่าการแทง Banker ทุกตา";
+    btHtml = `<h3>ผลย้อนทดสอบ (ทายตาที่ผ่านมาโดยใช้เฉพาะข้อมูลก่อนหน้า)</h3>
+      <div class="tblwrap"><table><thead><tr><th>วิธี</th><th>ทายถูก (n=${bt.n})</th></tr></thead><tbody>${body}</tbody></table></div>
+      <div class="verdict">ช่วงความคลาดเคลื่อนประมาณ ±${(ci * 100).toFixed(1)}% · ${verdict}</div>`;
+    btText = bt.rows.map(x => `${x.name}: ${pc(x.hit / bt.n)}`).join("; ") + ` (n=${bt.n})`;
+  } else {
+    btHtml = `<p class="note">ต้องมีผลที่ไม่นับ Tie อย่างน้อย ${minN() + 10} ตาจึงจะแสดงผลย้อนทดสอบ (ตอนนี้ ${s.length})</p>`;
+  }
+
+  let aiHtml = "";
+  if (aiPred && aiPred.n === n) {
+    aiHtml = aiPred.err
+      ? `<div class="verdict">${esc(aiPred.err)}</div>`
+      : `<div class="verdict"><b>AI เลือก ${aiPred.pick === "B" ? "Banker (B)" : "Player (P)"}</b> ความมั่นใจ ${pc(aiPred.prob)}<br>${esc(aiPred.reason)}</div>`;
+  }
+  lastPredict = { s, r, btText };
+  ghostPick = pick; renderBead();
+  const play = n !== lastRevealN ? " play" : ""; lastRevealN = n;
+  const off = (427.3 * (1 - pp)).toFixed(1);
+  const cfg = softCfg(), lv = cfg ? replayLive(cfg) : null;
+  const betLine = lv && !lv.waiting
+    ? (lv.dead ? `<div class="betline"><span>เงินหมดแล้ว ไม่มีเดิมพันต่อ</span></div>`
+      : `<div class="betline"><span class="coin bump">${money(lv.nextBet)}</span><span>เดิมพันตาถัดไปบน <b>${lv.nextSide === "B" ? "Banker" : "Player"}</b> ตามกลยุทธ์ที่ตั้งไว้</span></div>`)
+    : "";
+
+  box.innerHTML = `
+    <h3>คาดการณ์ตาถัดไปจากข้อมูล ${n} ตา</h3>
+    ${n < 30 ? '<p class="note">ข้อมูลน้อยกว่า 30 ตา ผลแกว่งมากและเชื่อถือไม่ได้</p>' : ""}
+    <div class="heroWrap">
+      <div class="hero${play}">
+        <svg viewBox="0 0 150 150" aria-hidden="true"><circle cx="75" cy="75" r="68" fill="none" stroke="var(--line)" stroke-width="7"/><circle class="arc ${pick}" cx="75" cy="75" r="68" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="427.3" stroke-dashoffset="${off}"/></svg>
+        <span class="ball big ${pick}" aria-hidden="true">${pick}</span>
+      </div>
+      <div class="heroTxt">
+        <b>${pick === "B" ? "Banker (B)" : "Player (P)"}</b>
+        <span>${near ? "ใกล้เคียงกัน แทบแยกไม่ออก" : "ฝั่งที่วิธีรวมเลือก"} · ${pc(pp)} (ไม่นับ Tie)<br>วงแหวนเต็มครึ่งวง = 50% = เท่ากับเดา<br>โอกาสออก Tie ~9.5% ทุกตา ไม่เกี่ยวกับประวัติ</span>
+        ${betLine}
+      </div>
+    </div>
+    <div class="tblwrap"><table><thead><tr><th>วิธีคำนวณ</th><th>เลือก</th><th>โอกาส</th></tr></thead><tbody>${eachRows}</tbody></table></div>
+    ${btHtml}
+    <div class="row"><button id="aiPredict">ให้ AI ชี้ตาถัดไป</button></div>
+    ${aiHtml}
+    <p class="note">ตัวเลขนี้เป็นการสรุปประวัติ ไม่ใช่การรู้ล่วงหน้า ไพ่แต่ละตาเป็นอิสระต่อกัน แม้ทายถูกบ่อยกว่า ค่าคาดหวังการเดิมพันก็ยังติดลบ AI ใช้ API key จากช่องด้านล่าง</p>`;
+  if (play) spinColor(pick);
+}
+
+let lastPredict = null;
+
+async function aiPredict(){
+  const key = $("apiKey").value.trim(), model = $("model").value.trim(), n = data.length;
+  if (!lastPredict) return;
+  if (!key) { aiPred = { n, err: "กรอก API key ในส่วน \"ให้ AI ช่วยวิเคราะห์\" ด้านล่างก่อน" }; renderPredict(); return; }
+  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
+  store.set("bacc_model", model);
+  const { s, r, btText } = lastPredict;
+  const prompt = `ลำดับผลจริง (ไม่นับ Tie, เก่า→ใหม่, ${s.length} ตา, แสดง 120 ตาล่าสุด): ${s.slice(-120).join("")}\n` +
+    `จำนวนทั้งหมด B=${s.filter(x => x === "B").length} P=${s.filter(x => x === "P").length}\n` +
+    `ผลของวิธีเชิงสถิติ (โอกาสออก B): ${r.each.map(x => `${x.name}=${x.p.toFixed(3)}`).join(", ")}; รวม=${r.pB.toFixed(3)}\n` +
+    `ผลย้อนทดสอบ: ${btText || "ข้อมูลยังน้อย"}\n` +
+    `เลือกฝั่งที่คาดว่าจะออกในตาถัดไประหว่าง B กับ P และบอกความมั่นใจตามความเป็นจริง`;
+  const btn = $("aiPredict"); btn.disabled = true; btn.textContent = "กำลังวิเคราะห์…";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model, max_tokens: 600,
+        system: "คุณเป็นนักสถิติ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่นและไม่มี markdown รูปแบบ {\"pick\":\"B\"หรือ\"P\",\"prob_pick\":ตัวเลข 0-1,\"reason\":\"เหตุผลสั้น ๆ ภาษาไทย\"} บาคาร่าแต่ละตาเป็นอิสระต่อกัน ดังนั้น prob_pick ต้องสอดคล้องกับความจริงและใกล้ 0.5 เว้นแต่ข้อมูลและผลย้อนทดสอบสนับสนุนจริง ๆ ใน reason ให้บอกตรง ๆ ว่าเป็นการประมาณจากข้อมูลตัวอย่างเล็ก และไม่ได้ทำให้การเดิมพันมีค่าคาดหวังเป็นบวก",
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
+    const txt = (j.content || []).map(b => b.type === "text" ? b.text : "").join("").replace(/```json|```/g, "").trim();
+    const o = JSON.parse(txt);
+    if (o.pick !== "B" && o.pick !== "P") throw new Error("รูปแบบคำตอบไม่ถูกต้อง");
+    const prob = Math.min(1, Math.max(0, Number(o.prob_pick) || 0.5));
+    aiPred = { n, pick: o.pick, prob, reason: String(o.reason || "") };
+  } catch (e) {
+    aiPred = { n, err: "เรียก AI ไม่สำเร็จ: " + e.message };
+  }
+  renderPredict();
+}
+(function(){ const m = store.get("bacc_minN"); if (m && ["10","20","30"].includes(m)) $("minN").value = m; })();
+$("minN").onchange = () => { store.set("bacc_minN", $("minN").value); renderPredict(); };
+$("predict").addEventListener("click", e => { if (e.target.id === "aiPredict") aiPredict(); });
+
+/* ---------- Live bankroll & bet table ---------- */
+const money = v => v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+const signed = v => (v > 0 ? "+" : "") + money(v);
+
+function softCfg(){
+  const n = id => parseFloat($(id).value);
+  const c = { balance: n("balance"), target: n("target"), unit: n("unit"), cap: n("cap"), strategy: $("strategy").value, side: $("side").value };
+  return [c.balance, c.unit, c.cap].every(v => Number.isFinite(v) && v > 0) ? c : null;
+}
+
+function ladder(c, mode, steps){
+  const st = makeStrategy(c.strategy, c.unit, c.cap), pay = c.side === "banker" ? 0.95 : 1;
+  let bal = c.balance; const out = [];
+  for (let k = 0; k < steps; k++) {
+    const bet = Math.min(st.bet(), bal);
+    if (bet <= 0) break;
+    bal += mode === "L" ? -bet : bet * pay;
+    st.update(mode);
+    const dead = bal <= 0.0001; if (dead) bal = 0;
+    out.push({ bet, bal, dead });
+    if (dead) break;
+  }
+  return out;
+}
+
+let predCache = { key: "", picks: [] };
+function predPicks(){
+  const mn = minN(), key = data.join("") + "|" + mn;
+  if (predCache.key === key) return predCache.picks;
+  const picks = new Array(data.length).fill(null), s = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i >= mn && s.length >= 5) picks[i] = predictAll(s).pB >= 0.5 ? "B" : "P";
+    if (data[i] !== "T") s.push(data[i]);
+  }
+  predCache = { key, picks };
+  return picks;
+}
+
+function replayLive(c){
+  const mode = $("liveSide").value, mn = minN(), picks = mode === "predict" ? predPicks() : null;
+  const st = makeStrategy(c.strategy, c.unit, c.cap);
+  let bal = c.balance, last = null, reached = 0; const rows = [];
+  for (let i = 0; i < data.length; i++) {
+    const r = data[i];
+    if (mode === "predict" && picks[i] === null) { if (r !== "T") last = r; continue; } // ช่วงข้อมูลตั้งต้น ยังไม่เดิมพัน
+    if (bal <= 0.0001) break;
+    const bet = Math.min(st.bet(), bal), side = mode === "predict" ? picks[i] : pickSide(c.side, last);
+    let o = "T", d = 0;
+    if (r !== "T") {
+      if (r === side) { d = bet * (side === "B" ? 0.95 : 1); o = "W"; } else { d = -bet; o = "L"; }
+    }
+    bal += d; if (bal <= 0.0001) bal = 0;
+    st.update(o); if (r !== "T") last = r;
+    if (!reached && bal >= c.target) reached = rows.length + 1;
+    rows.push({ i: i + 1, r, side, bet, o, d, bal });
+  }
+  let nextSide;
+  if (mode === "predict") {
+    const sNow = nonTie(data);
+    nextSide = data.length >= mn && sNow.length >= 5 ? (predictAll(sNow).pB >= 0.5 ? "B" : "P") : null;
+  } else nextSide = pickSide(c.side, last);
+  return { rows, bal, reached, dead: bal <= 0.0001, waiting: nextSide === null, nextBet: Math.min(st.bet(), bal), nextSide, mode, mn };
+}
+
+function renderLive(){
+  const box = $("live"), c = softCfg();
+  if (!c) { box.innerHTML = '<p class="note">กรอกยอดเริ่มต้น หน่วย และเพดานเป็นตัวเลขมากกว่า 0</p>'; return; }
+  const rp = replayLive(c), L = ladder(c, "L", 8), W = ladder(c, "W", 8), L40 = ladder(c, "L", 40);
+  const k = L40.findIndex(x => x.dead);
+  const bustAt = k < 0 ? "40+" : (k + 1) + " ตา";
+  const diff = rp.bal - c.balance;
+  const ballSide = s => `<span class="ball sm ${s}">${s}</span>`;
+  const cells = (arr, f) => Array.from({ length: 8 }, (_, i) => `<td>${arr[i] ? f(arr[i]) : "–"}</td>`).join("");
+  const head = Array.from({ length: 8 }, (_, i) => `<th>ตา ${i + 1}</th>`).join("");
+  const nextCard = rp.waiting ? `<b style="font-size:1rem">รอข้อมูลครบ ${rp.mn} ตา</b>` : rp.dead ? `<b class="neg">0 (เงินหมด)</b>` : `<b class="bump chip"><span class="coin">${money(rp.nextBet)}</span> ${ballSide(rp.nextSide)}</b>`;
+  const tail = rp.rows.slice(-100).reverse().map(x => `<tr><td>${x.i}</td><td>${ballSide(x.r)}</td><td>${ballSide(x.side)}</td><td>${money(x.bet)}</td>
+      <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? "เสมอ" : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
+  box.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${money(c.balance)}</b><span>ยอดเริ่มต้น</span></div>
+      <div class="stat">${nextCard}<span>เดิมพันตาถัดไป (ตามกลยุทธ์ที่เลือก)</span></div>
+      <div class="stat"><b class="${diff >= 0 ? "pos" : "neg"} bump">${money(Math.round(rp.bal * 100) / 100)}</b><span>ยอดคงเหลือหลังเดิมพัน ${rp.rows.length} ตา (${signed(Math.round(diff * 100) / 100)})</span></div>
+      <div class="stat"><b class="neg">${bustAt}</b><span>แพ้ติดกันถึงจุดนี้เงินหมด</span></div>
+    </div>
+    ${rp.reached ? `<p class="note">ยอดถึงเป้าหมาย ${money(c.target)} ที่ตาที่ ${rp.reached} ของข้อมูลจริง</p>` : ""}
+    <h3>ลำดับเดิมพันและยอดคงเหลือ</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th></th>${head}</tr></thead>
+      <tbody>
+        <tr><td>แพ้ติดกัน เดิมพัน</td>${cells(L, x => money(x.bet))}</tr>
+        <tr><td>แพ้ติดกัน คงเหลือ</td>${cells(L, x => `<span class="${x.dead ? "neg" : ""}">${money(Math.round(x.bal * 100) / 100)}</span>`)}</tr>
+        <tr><td>ชนะติดกัน เดิมพัน</td>${cells(W, x => money(x.bet))}</tr>
+        <tr><td>ชนะติดกัน คงเหลือ</td>${cells(W, x => `<span class="pos">${money(Math.round(x.bal * 100) / 100)}</span>`)}</tr>
+      </tbody></table></div>
+    <h3>เดินตามผลจริงทีละตา</h3>
+    ${rp.mode === "predict" ? `<p class="note">ข้อมูล ${rp.mn} ตาแรกเป็นข้อมูลตั้งต้น ยังไม่มีเดิมพัน เริ่มแทงตั้งแต่ตาที่ ${rp.mn + 1} โดยแทงฝั่งที่ระบบคาดการณ์ ถูก = กลับไปเดิมพันเริ่มต้น พลาด = ขึ้นตามกลยุทธ์ เสมอ = คืนเงินและเดิมพันเท่าเดิม</p>` : ""}
+    ${rp.rows.length ? `<div class="scrollY"><table><thead><tr><th>ตา</th><th>ผลออก</th><th>แทง</th><th>เดิมพัน</th><th>ได้/เสีย</th><th>คงเหลือ</th></tr></thead><tbody>${tail}</tbody></table></div>
+    <p class="note">${rp.rows.length > 100 ? "แสดง 100 ตาล่าสุด (ใหม่สุดอยู่บน) " : ""}เสมอ = คืนเงินเดิมพัน ตัวเลขนี้เป็นการเล่นสมมติตามข้อมูลที่กรอก ไม่ใช่การบอกว่าจะเกิดอะไรต่อ</p>`
+    : '<p class="note">ยังไม่มีข้อมูลผลจริง ตารางนี้จะเดินตามผลที่คุณกรอกใน Data Lab</p>'}`;
+}
+
+/* ---------- Boards: ชุดข้อมูลหลายกระดาน ---------- */
+let boards = [];
+try { boards = JSON.parse(store.get("bacc_boards") || "[]").filter(b => b && typeof b.results === "string"); } catch { boards = []; }
+const saveBoards = () => store.set("bacc_boards", JSON.stringify(boards));
+let meta = { name: "", tag: "", target: 50, auto: false, hook: "", hookAuto: false, k: 3, filter: "" };
+try { Object.assign(meta, JSON.parse(store.get("bacc_meta") || "{}")); } catch {}
+const saveMeta = () => store.set("bacc_meta", JSON.stringify(meta));
+const countsOf = str => { const c = { B: 0, P: 0, T: 0 }; for (const ch of str) if (c[ch] !== undefined) c[ch]++; return c; };
+const selBoards = () => boards.filter(b => !meta.filter || b.tag === meta.filter);
+const ctxBalls = s => `<span class="ctx">${s.split("").map(c => `<span class="ball sm ${c}">${c}</span>`).join("")}</span>`;
+const fdate = iso => { try { return new Date(iso).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }); } catch { return ""; } };
+const hookOn = () => /^https?:\/\//i.test((meta.hook || "").trim());
+
+function boardPayload(b){
+  const c = countsOf(b.results);
+  return { id: b.id, name: b.name, tag: b.tag, finished_at: b.at, hands: b.results.length, counts: c, results: b.results };
+}
+
+async function postHook(payload){
+  const url = (meta.hook || "").trim();
+  if (!hookOn()) throw new Error("กรอก URL ที่ขึ้นต้นด้วย http:// หรือ https://");
+  const body = JSON.stringify(payload);
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    return r.ok ? `ส่งสำเร็จ (HTTP ${r.status})` : `ปลายทางตอบกลับ HTTP ${r.status}`;
+  } catch {
+    await fetch(url, { method: "POST", mode: "no-cors", body });
+    return "ส่งแล้ว แต่เบราว์เซอร์ไม่อนุญาตให้อ่านผลตอบกลับ (CORS) ให้ตรวจที่ปลายทางว่าได้รับหรือไม่";
+  }
+}
+async function sendHook(payload){
+  const el = $("hookStatus");
+  el.textContent = "กำลังส่ง…";
+  try { el.textContent = await postHook(payload); } catch (e) { el.textContent = "ส่งไม่สำเร็จ: " + e.message; }
+}
+
+function finishBoard(auto){
+  if (!data.length) { if (!auto) alert("ยังไม่มีข้อมูลในกระดานนี้"); return; }
+  const target = meta.target || 50;
+  if (!auto && data.length < target && !confirm(`กระดานนี้มี ${data.length} ตา (เป้า ${target}) จบกระดานเลยหรือไม่?`)) return;
+  const b = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: (meta.name || "").trim() || "กระดาน " + (boards.length + 1),
+    tag: (meta.tag || "").trim() || "ไม่ระบุ",
+    at: new Date().toISOString(),
+    results: data.join("")
+  };
+  boards.push(b); saveBoards();
+  data = []; saveData();
+  meta.name = ""; $("boardName").value = ""; saveMeta();
+  renderData();
+  if (meta.hookAuto && hookOn()) sendHook({ event: "board_finished", sent_at: new Date().toISOString(), board: boardPayload(b), totals: { boards: boards.length, hands: boards.reduce((a, x) => a + x.results.length, 0) } });
+}
+
+function renderBoards(){
+  const target = meta.target || 50, n = data.length;
+  $("boardProg").max = target; $("boardProg").value = Math.min(n, target);
+  $("boardInfo").textContent = `กระดานปัจจุบัน ${n}/${target} ตา` + (n >= target ? " ครบเป้าแล้ว กด \"จบกระดาน\" ได้เลย" : "");
+  // tags
+  const tags = [...new Set(boards.map(b => b.tag))].sort();
+  if (meta.filter && !tags.includes(meta.filter)) meta.filter = "";
+  $("tagList").innerHTML = tags.map(x => `<option value="${esc(x)}"></option>`).join("");
+  $("tagFilter").innerHTML = '<option value="">ทั้งหมด</option>' + tags.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("tagFilter").value = meta.filter;
+  // list
+  const sel = selBoards();
+  if (!boards.length) $("boardList").innerHTML = '<p class="note">ยังไม่มีกระดานที่บันทึก</p>';
+  else {
+    const rows = [...sel].reverse().map(b => {
+      const c = countsOf(b.results), h = b.results.length;
+      return `<tr><td>${esc(b.name)}</td><td>${esc(b.tag)}</td><td>${h}</td><td>${pc(c.B / h)}</td><td>${pc(c.P / h)}</td><td>${pc(c.T / h)}</td><td>${fdate(b.at)}</td>
+        <td><button class="mini ghost" data-act="open" data-id="${b.id}">เปิดต่อ</button> <button class="mini tB" data-act="del" data-id="${b.id}">ลบ</button></td></tr>`;
+    }).join("");
+    $("boardList").innerHTML = `<div class="scrollY"><table><thead><tr><th>ชื่อ</th><th>รูปแบบ</th><th>ตา</th><th>B</th><th>P</th><th>T</th><th>วันที่</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  // per-tag summary
+  if (boards.length) {
+    const g = {};
+    boards.forEach(b => { const o = g[b.tag] || (g[b.tag] = { boards: 0, B: 0, P: 0, T: 0 }); const c = countsOf(b.results); o.boards++; o.B += c.B; o.P += c.P; o.T += c.T; });
+    const line = (name, o) => {
+      const h = o.B + o.P + o.T; let chi = 0;
+      for (const k of "BPT") { const e = h * THEORY[k]; chi += (o[k] - e) ** 2 / e; }
+      const pv = Math.exp(-chi / 2);
+      return `<tr><td>${esc(name)}</td><td>${o.boards}</td><td>${h}</td><td>${pc(o.B / h)}</td><td>${pc(o.P / h)}</td><td>${pc(o.T / h)}</td><td>${fmtP(pv)}</td></tr>`;
+    };
+    const tot = { boards: 0, B: 0, P: 0, T: 0 };
+    Object.values(g).forEach(o => { for (const k of ["boards", "B", "P", "T"]) tot[k] += o[k]; });
+    $("tagSummary").innerHTML = `<h3>ความน่าจะเป็นแยกตามรูปแบบ</h3><div class="tblwrap"><table><thead><tr><th>รูปแบบ</th><th>กระดาน</th><th>ตา</th><th>B</th><th>P</th><th>T</th><th>p (เทียบทฤษฎี)</th></tr></thead><tbody>${Object.entries(g).map(([k, o]) => line(k, o)).join("")}${Object.keys(g).length > 1 ? line("รวมทุกรูปแบบ", tot) : ""}</tbody></table></div>
+      <p class="note">ถ้า p ไม่ต่ำ (เช่น มากกว่า 0.05) แปลว่าความถี่ของรูปแบบนั้นยังไม่ต่างจากค่าทางทฤษฎีอย่างมีนัยสำคัญ</p>`;
+  } else $("tagSummary").innerHTML = "";
+  renderPattern();
+}
+
+/* ----- รูปแบบข้ามกระดาน (ไม่ข้ามเส้นแบ่งกระดาน ไม่นับ Tie) ----- */
+function patternStats(list, k){
+  const map = {}; let totB = 0, totN = 0;
+  for (const b of list) {
+    const s = b.results.split("").filter(x => x !== "T");
+    for (let i = k; i < s.length; i++) {
+      const ctx = s.slice(i - k, i).join(""), m = map[ctx] || (map[ctx] = { B: 0, P: 0 });
+      m[s[i]]++; totN++; if (s[i] === "B") totB++;
+    }
+  }
+  const p0 = totN ? totB / totN : 0.5;
+  const rows = Object.entries(map).map(([ctx, m]) => {
+    const n = m.B + m.P, z = (m.B - n * p0) / Math.sqrt(n * p0 * (1 - p0));
+    return { ctx, n, B: m.B, P: m.P, pB: m.B / n, z, p: 2 * (1 - phi(Math.abs(z))) };
+  });
+  const testable = rows.filter(r => r.n >= 10).length;
+  rows.forEach(r => { r.sig = r.n >= 10 && r.p < 0.05 / Math.max(1, testable); });
+  return { rows, p0, totN, testable };
+}
+
+let lastPattern = null;
+function renderPattern(){
+  const box = $("patternOut"), k = meta.k, ps = patternStats(selBoards(), k);
+  if (ps.totN < 30) {
+    lastPattern = null;
+    box.innerHTML = `<p class="note">ต้องมีข้อมูลรวมอย่างน้อย 30 ตาถัดไป (ไม่นับ Tie) จากกระดานที่เลือก ตอนนี้มี ${ps.totN}</p>`;
+    return;
+  }
+  const sNow = nonTie(data);
+  let cur = null;
+  if (sNow.length >= k) {
+    const ctx = sNow.slice(-k).join("");
+    cur = ps.rows.find(r => r.ctx === ctx) || { ctx, n: 0, B: 0, P: 0, pB: 0.5, p: 1, sig: false };
+  }
+  let curHtml = "";
+  if (cur) {
+    const lean = cur.pB >= 0.5 ? "B" : "P", pl = lean === "B" ? cur.pB : 1 - cur.pB;
+    const verdict = cur.n < 10 ? "ข้อมูลของรูปแบบนี้ยังน้อยกว่า 10 ครั้ง ยังสรุปไม่ได้"
+      : cur.sig ? "เบี่ยงเบนจากค่าเฉลี่ยแม้ปรับการทดสอบหลายรูปแบบแล้ว ควรพิสูจน์ซ้ำด้วยกระดานใหม่ก่อนเชื่อ"
+      : "ยังไม่ต่างจากการสุ่มอย่างมีนัยสำคัญ";
+    curHtml = `<div class="verdict">ล่าสุดในกระดานปัจจุบัน ${ctxBalls(cur.ctx)} → ในอดีตตามด้วย B ${cur.B} ครั้ง, P ${cur.P} ครั้ง (n=${cur.n})
+      ${cur.n ? `· เอนไปทาง <span class="ball sm ${lean}">${lean}</span> ${pc(pl)} (p=${fmtP(cur.p)})` : ""}<br>${verdict}</div>`;
+  } else curHtml = `<p class="note">กระดานปัจจุบันมีผลยังไม่ถึง ${k} ตา (ไม่นับ Tie) จึงยังไม่มีรูปแบบปัจจุบัน</p>`;
+  const top = [...ps.rows].sort((a, b) => b.n - a.n).slice(0, 20);
+  const nominal = ps.rows.filter(r => r.n >= 10 && r.p < 0.05).length;
+  const body = top.map(r => `<tr class="${r.sig ? "hl" : ""}"><td>${ctxBalls(r.ctx)}</td><td>${r.n}</td><td>${pc(r.pB)}</td><td>${pc(1 - r.pB)}</td><td>${((r.pB - ps.p0) * 100).toFixed(1)}</td><td>${fmtP(r.p)}</td><td>${r.n < 10 ? "ข้อมูลน้อย" : r.sig ? "เด่น" : "ปกติ"}</td></tr>`).join("");
+  lastPattern = { ps, k, cur };
+  box.innerHTML = curHtml + `<div class="scrollY"><table><thead><tr><th>รูปแบบ (เก่า→ใหม่)</th><th>n</th><th>ถัดไป B</th><th>ถัดไป P</th><th>ต่างจากเฉลี่ย (จุด%)</th><th>p</th><th>สถานะ</th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="note">ข้อมูลรวม ${ps.totN} ตา ค่าเฉลี่ย B ในตาถัดไป ${pc(ps.p0)} · รูปแบบที่ทดสอบได้ (n ≥ 10) ${ps.testable} แบบ มี ${nominal} แบบที่ p &lt; 0.05 ทั้งที่โดยบังเอิญคาดว่าจะมีประมาณ ${(ps.testable * 0.05).toFixed(1)} แบบ จึงใช้เกณฑ์เข้มขึ้น (Bonferroni) ในการติดป้าย "เด่น"</p>`;
+}
+
+async function callClaude(system, prompt, maxTokens){
+  const key = $("apiKey").value.trim(), model = $("model").value.trim();
+  if (!key) throw new Error('กรอก API key ในส่วน "ให้ AI ช่วยวิเคราะห์" ด้านล่างของหน้าก่อน');
+  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
+  store.set("bacc_model", model);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] })
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
+  return (j.content || []).map(b => b.type === "text" ? b.text : "").join("\n").trim();
+}
+
+async function aiPattern(){
+  const out = $("aiPatOut");
+  if (!lastPattern) { out.textContent = "ยังมีข้อมูลข้ามกระดานไม่พอ (ต้องอย่างน้อย 30 ตาถัดไป)"; return; }
+  const { ps, k, cur } = lastPattern, sel = selBoards();
+  const boardsTxt = sel.slice(-40).map(b => { const c = countsOf(b.results); return `${b.name} [${b.tag}] ${b.results.length} ตา B=${c.B} P=${c.P} T=${c.T}`; }).join("\n");
+  const rowTxt = r => `${r.ctx}: n=${r.n} ถัดไป B=${r.B} P=${r.P} p=${fmtP(r.p)}${r.sig ? " (ผ่านเกณฑ์ Bonferroni)" : ""}`;
+  const byN = [...ps.rows].sort((a, b) => b.n - a.n).slice(0, 20).map(rowTxt).join("\n");
+  const byZ = ps.rows.filter(r => r.n >= 10).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 8).map(rowTxt).join("\n");
+  const prompt = `ตัวกรองรูปแบบ: ${meta.filter || "ทั้งหมด"}; ดูย้อนหลัง k=${k} ตา (ไม่นับ Tie, ไม่ข้ามกระดาน)\nกระดาน:\n${boardsTxt}\n\nข้อมูลรวม ${ps.totN} ตา ค่าเฉลี่ย B ตาถัดไป=${ps.p0.toFixed(3)}; รูปแบบที่ทดสอบได้ ${ps.testable}\nรูปแบบที่พบบ่อยสุด:\n${byN}\n\nรูปแบบที่เบี่ยงเบนมากสุด (n>=10):\n${byZ || "(ไม่มี)"}\n\nรูปแบบปัจจุบันของกระดานที่กำลังเล่น: ${cur ? rowTxt(cur) : "ยังไม่มี"}`;
+  const btn = $("aiPattern"); btn.disabled = true; out.textContent = "กำลังวิเคราะห์…";
+  try {
+    out.textContent = await callClaude("คุณเป็นนักสถิติ ตอบภาษาไทย กระชับ เป็นข้อ ๆ: 1) มีรูปแบบใดเบี่ยงเบนจากค่าเฉลี่ยจริงหลังคำนึงถึงการทดสอบหลายครั้งหรือไม่ 2) จัดอันดับรูปแบบที่เอนเอียงมากสุด 3 อันดับพร้อมข้อจำกัด 3) ถ้ารูปแบบปัจจุบันเป็นตามข้อมูล ควรคาดการณ์ B หรือ P และมั่นใจเท่าไรตามความเป็นจริง 4) ข้อมูลพอหรือไม่ ควรเก็บเพิ่มประมาณกี่กระดาน บาคาร่าแต่ละตาเป็นอิสระต่อกัน ห้ามสนับสนุน gambler's fallacy ห้ามบอกว่าชนะแน่หรือมีระบบที่ได้เปรียบ ถ้าไม่มีหลักฐานให้พูดตรง ๆ ว่าไม่มี", prompt, 1400);
+  } catch (e) { out.textContent = "เรียก AI ไม่สำเร็จ: " + e.message; }
+  finally { btn.disabled = false; }
+}
 
 /* ---------- Simulation runner ---------- */
 let rows = [], stopFlag = false, lastCfg = null, lastSimText = "";
@@ -563,7 +1147,92 @@ async function askAI(){
 $("start").onclick = start;
 $("stop").onclick = () => { stopFlag = true; };
 $("save").onclick = saveCsv;
+$("boardName").value = meta.name; $("boardTag").value = meta.tag; $("boardTarget").value = meta.target; $("autoEnd").checked = !!meta.auto;
+$("kSel").value = String(meta.k); $("hookUrl").value = meta.hook; $("hookAuto").checked = !!meta.hookAuto;
+$("boardName").oninput = () => { meta.name = $("boardName").value; saveMeta(); };
+$("boardTag").oninput = () => { meta.tag = $("boardTag").value; saveMeta(); };
+$("boardTarget").oninput = () => { meta.target = Math.max(1, parseInt($("boardTarget").value, 10) || 50); saveMeta(); renderBoards(); };
+$("autoEnd").onchange = () => { meta.auto = $("autoEnd").checked; saveMeta(); };
+$("kSel").onchange = () => { meta.k = parseInt($("kSel").value, 10) || 3; saveMeta(); renderPattern(); };
+$("tagFilter").onchange = () => { meta.filter = $("tagFilter").value; saveMeta(); renderBoards(); };
+$("hookUrl").oninput = () => { meta.hook = $("hookUrl").value; saveMeta(); };
+$("hookAuto").onchange = () => { meta.hookAuto = $("hookAuto").checked; saveMeta(); };
+$("endBoard").onclick = () => finishBoard(false);
+$("aiPattern").onclick = aiPattern;
+$("hookTest").onclick = () => sendHook({ event: "test", sent_at: new Date().toISOString(), message: "ทดสอบการเชื่อมต่อจาก Baccarat Simulator" });
+$("hookAll").onclick = () => sendHook({ event: "export_boards", sent_at: new Date().toISOString(), filter: meta.filter || null, boards: selBoards().map(boardPayload) });
+$("boardList").addEventListener("click", e => {
+  const bt = e.target.closest("button[data-act]"); if (!bt) return;
+  const b = boards.find(x => x.id === bt.dataset.id); if (!b) return;
+  if (bt.dataset.act === "del") {
+    if (!confirm(`ลบกระดาน "${b.name}" ?`)) return;
+    boards = boards.filter(x => x !== b); saveBoards(); renderBoards();
+  } else {
+    if (data.length && !confirm("แทนที่ข้อมูลกระดานปัจจุบันด้วยกระดานนี้? (กระดานนี้จะถูกนำออกจากรายการที่บันทึก)")) return;
+    data = b.results.split(""); saveData();
+    meta.name = b.name; meta.tag = b.tag; $("boardName").value = b.name; $("boardTag").value = b.tag; saveMeta();
+    boards = boards.filter(x => x !== b); saveBoards(); renderData();
+  }
+});
+const SIM_IDS = ["balance", "target", "unit", "cap", "maxHands", "sessions", "strategy", "side", "source"];
+$("exportBoards").onclick = () => {
+  const sim = {}; SIM_IDS.forEach(id => { sim[id] = $(id).value; });
+  const backup = {
+    app: "baccarat-simulator", version: 2, exported: new Date().toISOString(),
+    boards,
+    current: { results: data.join(""), name: meta.name || "", tag: meta.tag || "" },
+    settings: { sim, boardTarget: meta.target, autoEnd: !!meta.auto, patternK: meta.k, minN: $("minN").value, liveSide: $("liveSide").value }
+  };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 1)], { type: "application/json" }));
+  a.download = "baccarat_backup_" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  $("backupStatus").textContent = `ดาวน์โหลดแล้ว: ${boards.length} กระดาน + กระดานปัจจุบัน ${data.length} ตา`;
+};
+$("importBoards").onclick = () => $("boardFile").click();
+$("boardFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  const st = $("backupStatus"), clean = s => String(s || "").toUpperCase().split("").filter(x => "BPT".includes(x)).join("");
+  let j;
+  try { j = JSON.parse(await f.text()); } catch { st.textContent = "อ่านไฟล์ไม่ได้ ต้องเป็นไฟล์ JSON ที่ดาวน์โหลดจากหน้านี้"; return; }
+  const list = Array.isArray(j) ? j : Array.isArray(j.boards) ? j.boards : [];
+  const cur = j && j.current && typeof j.current === "object" ? clean(j.current.results)
+    : (!Array.isArray(j) && j && j.results ? clean(Array.isArray(j.results) ? j.results.join("") : j.results) : "");
+  if (!list.length && !cur) { st.textContent = "ไม่พบข้อมูลกระดานในไฟล์นี้"; return; }
+  const replace = $("restoreMode").value === "replace";
+  if (replace && !confirm(`แทนที่ข้อมูลเดิมทั้งหมดด้วยไฟล์นี้? (กระดานเดิม ${boards.length} กระดาน และกระดานปัจจุบัน ${data.length} ตา จะหายไป)`)) return;
+  if (replace) boards = [];
+  let add = 0, skip = 0;
+  for (const b of list) {
+    const res = clean(b && b.results);
+    if (!res || (b.id && boards.some(x => x.id === b.id))) { skip++; continue; }
+    boards.push({ id: b.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: String(b.name || "นำเข้า"), tag: String(b.tag || "ไม่ระบุ"), at: b.at || b.finished_at || new Date().toISOString(), results: res });
+    add++;
+  }
+  let curMsg = "";
+  if (cur && (replace || !data.length)) {
+    data = cur.split(""); saveData();
+    if (j.current) { meta.name = String(j.current.name || ""); meta.tag = String(j.current.tag || meta.tag || ""); $("boardName").value = meta.name; $("boardTag").value = meta.tag; }
+    curMsg = `, กระดานปัจจุบัน ${data.length} ตา`;
+  } else if (cur) curMsg = ", ข้ามกระดานปัจจุบันในไฟล์ (เพราะเครื่องนี้มีกระดานที่กำลังเล่นอยู่)";
+  const s = j && j.settings;
+  if (replace && s) {
+    if (s.sim) for (const id of SIM_IDS) if (s.sim[id] !== undefined && $(id)) $(id).value = s.sim[id];
+    if (s.boardTarget) { meta.target = Math.max(1, parseInt(s.boardTarget, 10) || 50); $("boardTarget").value = meta.target; }
+    if (s.autoEnd !== undefined) { meta.auto = !!s.autoEnd; $("autoEnd").checked = meta.auto; }
+    if (s.patternK) { meta.k = parseInt(s.patternK, 10) || 3; $("kSel").value = String(meta.k); }
+    if (["10", "20", "30"].includes(String(s.minN))) { $("minN").value = String(s.minN); store.set("bacc_minN", String(s.minN)); }
+    if (s.liveSide === "predict" || s.liveSide === "setting") { $("liveSide").value = s.liveSide; store.set("bacc_liveSide", s.liveSide); }
+    curMsg += ", ค่าตั้งต้น";
+  }
+  saveBoards(); saveMeta(); renderData();
+  st.textContent = `กู้คืนสำเร็จ: เพิ่ม ${add} กระดาน${skip ? ` (ข้าม ${skip} ที่ซ้ำหรือว่าง)` : ""}${curMsg}`;
+};
 $("askAI").onclick = askAI;
+(function(){ const v = store.get("bacc_liveSide"); if (v === "predict" || v === "setting") $("liveSide").value = v; })();
+$("liveSide").onchange = () => { store.set("bacc_liveSide", $("liveSide").value); renderPredict(); renderLive(); };
+["balance", "target", "unit", "cap", "strategy", "side"].forEach(id => { const f = () => { renderLive(); renderPredict(); }; $(id).addEventListener("input", f); $(id).addEventListener("change", f); });
 window.addEventListener("resize", () => { if (rows.length) drawChart(rows.map(x => x.profit)); });
 renderData();
 </script>
