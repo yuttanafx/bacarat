@@ -174,7 +174,7 @@ th{color:var(--muted);font-weight:600}
     <div id="aiPatOut" aria-live="polite"></div>
 
     <h3>ฐานข้อมูลกลาง (ดึงกระดานมาใช้)</h3>
-    <p class="note">ดึงกระดานจากเซิร์ฟเวอร์ฐานข้อมูล (ชุด Kaggle ราว 111,000 กระดาน) มารวมกับกระดานในเครื่อง ดึงได้ครั้งละไม่เกิน 1,000 กระดาน เพราะเบราว์เซอร์เก็บข้อมูลได้จำกัด กระดานที่ดึงมาจะติดแท็กของชุดข้อมูล ใช้ "ดูเฉพาะรูปแบบ" แยกออกจากกระดานที่เล่นเองได้ ต้องเปิดเซิร์ฟเวอร์ไว้ก่อน (ดูวิธีใน db/README.md)</p>
+    <p class="note">ดึงกระดานจากเซิร์ฟเวอร์ฐานข้อมูล (ชุด Kaggle ราว 111,000 กระดาน) มารวมกับกระดานในเครื่อง ดึงได้ครั้งละไม่เกิน 1,000 กระดาน เพราะเบราว์เซอร์เก็บข้อมูลได้จำกัด กระดานที่ดึงมาจะติดแท็กของชุดข้อมูล ใช้ "ดูเฉพาะรูปแบบ" แยกออกจากกระดานที่เล่นเองได้ มี 2 วิธี: ดึงจากไฟล์ข้อมูลที่อยู่ในเว็บเอง (ใช้บน GitHub Pages ได้ ไม่ต้องมีเซิร์ฟเวอร์) หรือดึงจากเซิร์ฟเวอร์ฐานข้อมูล (ต้องเปิด server.py ก่อน ดูใน db/README.md)</p>
     <div class="grid">
       <div><label for="dbUrl">URL ฐานข้อมูล</label><input id="dbUrl" type="url" placeholder="http://localhost:8787"></div>
       <div><label for="dbKey">โทเคน (ถ้าตั้งไว้ที่เซิร์ฟเวอร์)</label><input id="dbKey" type="password" autocomplete="off"></div>
@@ -184,8 +184,9 @@ th{color:var(--muted);font-weight:600}
       <div><label for="dbMode">วิธีเลือก</label><select id="dbMode"><option value="random" selected>สุ่ม</option><option value="latest">ใหม่สุดก่อน</option></select></div>
     </div>
     <div class="row">
-      <button class="ghost" id="dbTest">ทดสอบการเชื่อมต่อ</button>
-      <button id="dbPull">ดึงกระดานจากฐานข้อมูล</button>
+      <button id="dbPullStatic">ดึงจากไฟล์ข้อมูลในเว็บ (ไม่ต้องใช้เซิร์ฟเวอร์)</button>
+      <button class="ghost" id="dbTest">ทดสอบการเชื่อมต่อเซิร์ฟเวอร์</button>
+      <button class="ghost" id="dbPull">ดึงจากเซิร์ฟเวอร์ฐานข้อมูล</button>
       <button class="ghost" id="dbSetHook">ตั้ง Webhook ให้ส่งกระดานเข้าฐานข้อมูลนี้</button>
     </div>
     <div id="dbStatus" class="note" aria-live="polite"></div>
@@ -1477,24 +1478,52 @@ $("dbTest").onclick = async () => {
     st.textContent = `เชื่อมต่อได้: ${n0(s.shoes)} กระดาน ${n0(s.hands)} ตา (B ${pc(s.freq.B)} / P ${pc(s.freq.P)} / T ${pc(s.freq.T)})`;
   } catch (e) { st.textContent = "เชื่อมต่อไม่ได้: " + e.message; }
 };
+function mergeDbBoards(list, total, exact = true){
+  const have = new Set(boards.map(b => b.id)), clean = x => String(x || "").toUpperCase().split("").filter(c => "BPT".includes(c)).join("");
+  let add = 0, skip = 0;
+  for (const b of list) {
+    const res = clean(b.results);
+    if (!res || !b.id || have.has(b.id)) { skip++; continue; }
+    boards.push({ id: String(b.id), name: String(b.name || "ฐานข้อมูล"), tag: String(b.tag || "ไม่ระบุ"), at: b.at || new Date().toISOString(), results: res });
+    have.add(b.id); add++;
+  }
+  const json = JSON.stringify(boards); saveBoards(); renderData();
+  const full = store.get("bacc_boards") !== json;
+  return `ดึงสำเร็จ: เพิ่ม ${n0(add)} กระดาน` + (skip ? ` (ข้าม ${n0(skip)} ที่ซ้ำ)` : "") + ` จากทั้งหมด ${n0(total)}` + (exact ? " ที่ตรงเงื่อนไข" : " กระดานในชุดข้อมูล") +
+    (full ? " แต่พื้นที่เก็บข้อมูลของเบราว์เซอร์เต็ม ข้อมูลจะหายเมื่อรีเฟรช ลองลดจำนวนกระดานหรือลบกระดานเก่า" : "");
+}
+/* ดึงจากไฟล์ข้อมูลที่อยู่ในเว็บเอง (data/manifest.json + data/sNNN.txt) ไม่ต้องมีเซิร์ฟเวอร์ */
+$("dbPullStatic").onclick = async () => {
+  const st = $("dbStatus"), btn = $("dbPullStatic"); st.textContent = "กำลังดึงจากไฟล์ข้อมูล…"; btn.disabled = true;
+  try {
+    if (location.protocol === "file:") throw new Error("เปิดจากไฟล์ในเครื่องตรง ๆ อ่านไฟล์ข้อมูลไม่ได้ ให้เปิดผ่านเว็บ (เช่น GitHub Pages) หรือรัน python3 -m http.server ในโฟลเดอร์โปรเจกต์");
+    const get = async f => { const r = await fetch(new URL("data/" + f, location.href)); if (!r.ok) throw new Error(`ไม่พบ data/${f} (HTTP ${r.status}) ต้องอัปโหลดโฟลเดอร์ data ไปพร้อมหน้าเว็บ`); return r; };
+    const man = await (await get("manifest.json")).json();
+    const N = parseInt($("dbN").value, 10) || 300, minH = meta.dbMin || 1, latest = $("dbMode").value === "latest";
+    if ($("dbTag").value && $("dbTag").value !== man.tag) throw new Error(`ไฟล์ข้อมูลในเว็บมีเฉพาะแท็ก ${man.tag} (แท็กอื่นต้องดึงจากเซิร์ฟเวอร์) เลือก "ทั้งหมด" หรือแท็กนี้`);
+    const k = Math.min(man.files.length, Math.max(1, Math.ceil(N / 100)));
+    let idx = man.files.map((_, i) => i);
+    if (latest) idx = idx.slice(-k).reverse();
+    else { for (let i = idx.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [idx[i], idx[j]] = [idx[j], idx[i]]; } idx = idx.slice(0, k); }
+    let pool = [];
+    for (const i of idx) {
+      const lines = (await (await get(man.files[i])).text()).split("\n");
+      let part = [];
+      lines.forEach((res, j) => { if (res && res.length >= minH) { const n = i * man.per_shard + j + 1; part.push({ id: man.id_prefix + String(n).padStart(6, "0"), name: "Kaggle #" + String(n).padStart(6, "0"), tag: man.tag, at: man.at, results: res }); } });
+      if (latest) part.reverse(); else part.sort(() => Math.random() - 0.5);
+      pool = pool.concat(part.slice(0, Math.ceil(N / k)));
+    }
+    st.textContent = mergeDbBoards(pool.slice(0, N), man.boards, false);
+  } catch (e) { st.textContent = "ดึงไม่สำเร็จ: " + e.message; }
+  btn.disabled = false;
+};
 $("dbPull").onclick = async () => {
   const st = $("dbStatus"), btn = $("dbPull"); st.textContent = "กำลังดึง…"; btn.disabled = true;
   try {
     const q = new URLSearchParams({ limit: $("dbN").value, min_hands: meta.dbMin || 1, order: $("dbMode").value });
     if ($("dbTag").value) q.set("tag", $("dbTag").value);
     const j = await dbGet("/api/boards?" + q);
-    const have = new Set(boards.map(b => b.id)), clean = x => String(x || "").toUpperCase().split("").filter(c => "BPT".includes(c)).join("");
-    let add = 0, skip = 0;
-    for (const b of j.boards || []) {
-      const res = clean(b.results);
-      if (!res || !b.id || have.has(b.id)) { skip++; continue; }
-      boards.push({ id: String(b.id), name: String(b.name || "ฐานข้อมูล"), tag: String(b.tag || "ไม่ระบุ"), at: b.at || new Date().toISOString(), results: res });
-      have.add(b.id); add++;
-    }
-    const json = JSON.stringify(boards); saveBoards(); renderData();
-    const full = store.get("bacc_boards") !== json;
-    st.textContent = `ดึงสำเร็จ: เพิ่ม ${n0(add)} กระดาน` + (skip ? ` (ข้าม ${n0(skip)} ที่ซ้ำ)` : "") + ` จากทั้งหมด ${n0(j.total)} ที่ตรงเงื่อนไข` +
-      (full ? " แต่พื้นที่เก็บข้อมูลของเบราว์เซอร์เต็ม ข้อมูลจะหายเมื่อรีเฟรช ลองลดจำนวนกระดานหรือลบกระดานเก่า" : "");
+    st.textContent = mergeDbBoards(j.boards || [], j.total);
   } catch (e) { st.textContent = "ดึงไม่สำเร็จ: " + e.message; }
   btn.disabled = false;
 };
