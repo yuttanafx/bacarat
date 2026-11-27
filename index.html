@@ -120,6 +120,11 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
 dialog#cfgDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:18px;width:min(480px,92vw)}
 dialog#cfgDlg::backdrop{background:rgba(0,0,0,.5)}
 dialog#cfgDlg h2{margin:0 0 12px}
+.gameSw{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 10px}
+.gameSw button{border:0;border-radius:0;background:var(--panel2);color:var(--fg);padding:9px 16px;font-weight:700;margin:0}
+.gameSw button[aria-pressed="true"]{background:var(--green);color:#fff}
+body:not(.dt) .dtOnly{display:none}
+body.dt .bacOnly{display:none}
 </style>
 </head>
 <body>
@@ -152,6 +157,12 @@ dialog#cfgDlg h2{margin:0 0 12px}
                   <option value="predict">ตามคาดการณ์ของระบบ (จากการวิเคราะห์ข้อมูล)</option>
         </select></div>
   </div>
+  <div class="dtOnly" style="margin-top:10px"><label for="tieRule">กติกาเมื่อออกเสมอ (เสือมังกร)</label>
+    <select id="tieRule">
+      <option value="0.5" selected>เสียครึ่งหนึ่งของเดิมพัน (พบบ่อยที่สุด)</option>
+      <option value="1">เสียเดิมพันเต็มจำนวน</option>
+      <option value="0">คืนเงินเดิมพัน</option>
+    </select><p class="note" style="margin:4px 0 0">ดูกติกาของโต๊ะที่เล่นจริง ค่านี้กระทบกำไรขาดทุนและเกณฑ์คุ้มทุน</p></div>
   <p class="note" id="cfgErr" style="color:var(--red)" role="alert"></p>
   <div class="btns" style="margin:12px 0 0">
     <button id="cfgOk" style="background:var(--green)">ตกลง</button>
@@ -160,6 +171,8 @@ dialog#cfgDlg h2{margin:0 0 12px}
 </dialog>
 <div id="scrim"></div>
 <nav id="drawer" aria-label="เมนูหน้า" aria-hidden="true">
+  <h2>เลือกเกม</h2>
+  <div class="gameSw" role="group" aria-label="เลือกเกม"><button type="button" class="gameBtn" data-game="bac">บาคาร่า</button><button type="button" class="gameBtn" data-game="dt">เสือมังกร</button></div>
   <h2>เลือกหน้า</h2>
   <button data-page="main">หน้าหลัก<small>ฐานข้อมูลผลจริง (Data Lab) และคาดการณ์</small></button>
   <button data-page="data">กระดานและฐานข้อมูล<small>ชุดข้อมูล ดึงจากฐานข้อมูล Webhook ทดสอบนอกตัวอย่าง</small></button>
@@ -169,6 +182,7 @@ dialog#cfgDlg h2{margin:0 0 12px}
 <main>
 <div class="page" id="page-main" data-title="หน้าหลัก">
   <h1>Baccarat Simulator</h1>
+  <div class="gameSw" role="group" aria-label="เลือกเกม"><button type="button" class="gameBtn" data-game="bac">บาคาร่า</button><button type="button" class="gameBtn" data-game="dt">เสือมังกร</button></div>
   <p class="sub">จำลองไพ่บาคาร่า 8 สำรับ เก็บผลจริงเป็นฐานข้อมูล วิเคราะห์ความน่าจะเป็น และให้ AI ช่วยสรุป ไม่เชื่อมต่อเว็บพนันใด ๆ</p>
 
   <!-- ===== Data Lab ===== -->
@@ -269,7 +283,7 @@ dialog#cfgDlg h2{margin:0 0 12px}
     <div id="aiPatOut" aria-live="polite"></div>
     </details>
 
-    <details class="fold"><summary>ฐานข้อมูลกลาง (ดึงกระดานมาใช้)</summary>
+    <details class="fold bacOnly"><summary>ฐานข้อมูลกลาง (ดึงกระดานมาใช้)</summary>
     <p class="note">ดึงกระดานจากเซิร์ฟเวอร์ฐานข้อมูล (ชุด Kaggle ราว 111,000 กระดาน) มารวมกับกระดานในเครื่อง ดึงได้ครั้งละไม่เกิน 1,000 กระดาน เพราะเบราว์เซอร์เก็บข้อมูลได้จำกัด กระดานที่ดึงมาจะติดแท็กของชุดข้อมูล ใช้ "ดูเฉพาะรูปแบบ" แยกออกจากกระดานที่เล่นเองได้ มี 2 วิธี: ดึงจากไฟล์ข้อมูลที่อยู่ในเว็บเอง (ใช้บน GitHub Pages ได้ ไม่ต้องมีเซิร์ฟเวอร์) หรือดึงจากเซิร์ฟเวอร์ฐานข้อมูล (ต้องเปิด server.py ก่อน ดูใน db/README.md)</p>
     <div class="grid">
       <div><label for="dbUrl">URL ฐานข้อมูล</label><input id="dbUrl" type="url" placeholder="http://localhost:8787"></div>
@@ -401,17 +415,28 @@ dialog#cfgDlg h2{margin:0 0 12px}
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const CARDS = [1,2,3,4,5,6,7,8,9,0,0,0,0];
 const FIB = [1,1,2,3,5,8,13,21,34,55,89];
-const THEORY = { B: 0.458597, P: 0.446247, T: 0.095156 };
-const NAMES = { B: "Banker", P: "Player", T: "Tie" };
 
 /* ---------- storage (guarded) ---------- */
+const GAME = (() => { try { return localStorage.getItem("bacc_game") === "dt" ? "dt" : "bac"; } catch { return "bac"; } })();
+const SHARED_KEYS = /^bacc_(game|provider|key|model)/; // ค่าที่ใช้ร่วมกันทั้งสองเกม (เกม, ผู้ให้บริการ AI, API key)
+const sk = k => GAME === "dt" && k.startsWith("bacc_") && !SHARED_KEYS.test(k) ? "bacc_dt_" + k.slice(5) : k;
 const store = {
-  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v){ try { localStorage.setItem(k, v); } catch {} },
-  del(k){ try { localStorage.removeItem(k); } catch {} }
+  get(k){ try { return localStorage.getItem(sk(k)); } catch { return null; } },
+  set(k, v){ try { localStorage.setItem(sk(k), v); } catch {} },
+  del(k){ try { localStorage.removeItem(sk(k)); } catch {} }
 };
+document.body.classList.toggle("dt", GAME === "dt");
+const gameText = t => GAME !== "dt" ? t : String(t)
+  .replace(/ออกประมาณ 68–84 ตา/g, "ออกประมาณ 190–205 ตา").replace(/Banker/g, "Dragon").replace(/Player/g, "Tiger")
+  .replace(/บาคาร่า/g, "เสือมังกร").replace(/Baccarat/g, "Dragon Tiger");
+const tieLoss = () => GAME === "dt" ? (parseFloat($("tieRule").value) || 0) : 0;      // สัดส่วนเดิมพันที่เสียเมื่อออกเสมอ
+const payOf = side => GAME === "dt" ? 1 : (side === "B" ? 0.95 : 1);                 // ค่าจ่ายเมื่อชนะ
+const tieDesc = () => { const t = tieLoss(); return t === 0 ? "คืนเงินเดิมพัน" : t === 1 ? "เสียเดิมพันเต็มจำนวน" : "เสียครึ่งหนึ่งของเดิมพัน"; };
+const breakEven = () => { if (GAME !== "dt") return 1 / 1.95; const t = THEORY.T; return 0.5 + t * tieLoss() / (2 * (1 - t)); }; // สัดส่วนทายถูก (ไม่นับเสมอ) ที่เสมอตัว
+const CARDS = GAME === "dt" ? [1,2,3,4,5,6,7,8,9,10,11,12,13] : [1,2,3,4,5,6,7,8,9,0,0,0,0];
+const THEORY = GAME === "dt" ? { B: 0.462651, P: 0.462651, T: 0.074699 } : { B: 0.458597, P: 0.446247, T: 0.095156 }; // เสือมังกร: เสมอ = 31/415 (8 สำรับ)
+const NAMES = GAME === "dt" ? { B: "Dragon", P: "Tiger", T: "Tie" } : { B: "Banker", P: "Player", T: "Tie" };
 
 /* ---------- Game engine ---------- */
 class Shoe {
@@ -430,6 +455,7 @@ class Shoe {
 }
 
 function playHand(s){
+  if (GAME === "dt") { const d = s.draw(), t = s.draw(); return d > t ? "B" : t > d ? "P" : "T"; } // B = Dragon, P = Tiger
   const p = [s.draw(), s.draw()], b = [s.draw(), s.draw()];
   let pt = (p[0] + p[1]) % 10, bt = (b[0] + b[1]) % 10;
   if (pt < 8 && bt < 8) {
@@ -514,8 +540,8 @@ function runSession(c){
     if (r === null) { reason = "data_end"; break; }
     hands++; mbet = Math.max(mbet, bet);
     let o;
-    if (r === "T") o = "T";
-    else if (r === side) { bal += bet * (side === "B" ? 0.95 : 1); o = "W"; }
+    if (r === "T") { o = "T"; bal -= bet * tieLoss(); if (bal < 0) bal = 0; }
+    else if (r === side) { bal += bet * payOf(side); o = "W"; }
     else { bal -= bet; o = "L"; }
     st.update(o);
     mls = Math.max(mls, st.streak);
@@ -785,8 +811,8 @@ async function runOOS(){
   const body = all.map(x => { const r = x.hit / n, d = r - br; return `<tr><td>${esc(x.name)}</td><td>${pc(r)}</td><td class="${d > ci * Math.SQRT2 ? "pos" : d < -ci * Math.SQRT2 ? "neg" : ""}">${(d * 100 >= 0 ? "+" : "") + (d * 100).toFixed(2)}</td></tr>`; }).join("");
   const best = Math.max(...rows.map(x => x.hit), comb.hit) / n - br;
   const verdict = best > ci * Math.SQRT2
-    ? "มีวิธีที่แม่นกว่าอ้างอิงเกินช่วงคลาดเคลื่อน แต่ลองหลายวิธีบนชุดเดียว ควรทดสอบซ้ำด้วยกระดานใหม่ที่ยังไม่เคยใช้ก่อนเชื่อ และอย่าลืมว่าแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน (หักคอมมิชชั่น 5%)"
-    : "ไม่มีวิธีใดแม่นกว่าการแทงฝั่งเดียวทุกตาอย่างมีนัยสำคัญ แปลว่าการคาดการณ์จากประวัติยังไม่ชนะการเดา (และแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน)";
+    ? "มีวิธีที่แม่นกว่าอ้างอิงเกินช่วงคลาดเคลื่อน แต่ลองหลายวิธีบนชุดเดียว ควรทดสอบซ้ำด้วยกระดานใหม่ที่ยังไม่เคยใช้ก่อนเชื่อ และอย่าลืมว่าแทง Banker ต้องถูกเกิน " + (breakEven() * 100).toFixed(2) + "% จึงคุ้มทุน (" + (GAME === "dt" ? "เสมอ" + tieDesc() : "หักคอมมิชชั่น 5%") + ")"
+    : "ไม่มีวิธีใดแม่นกว่าการแทงฝั่งเดียวทุกตาอย่างมีนัยสำคัญ แปลว่าการคาดการณ์จากประวัติยังไม่ชนะการเดา (และแทง Banker ต้องถูกเกิน " + (breakEven() * 100).toFixed(2) + "% จึงคุ้มทุน)";
   out.innerHTML = `<p class="note">${F === 5 ? "สลับชุด 5 รอบ (แต่ละรอบสร้างโมเดลจากอีก 4 ส่วน) " : ""}สร้างโมเดลจากประมาณ ${n0(trainBoards)} กระดาน (${n0(trainHands)} ตา) ทดสอบกับ ${n0(testBoards)} กระดานที่ไม่เคยเห็นในรอบนั้น รวม ${n0(n)} ตา (ไม่นับ Tie) ทายตั้งแต่ตาที่ ${START + 1} ของแต่ละกระดาน</p>
     <div class="tblwrap"><table><thead><tr><th>วิธี</th><th>ทายถูก</th><th>ต่างจาก Banker ทุกตา (จุด %)</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="verdict">ช่วงคลาดเคลื่อนประมาณ ±${(ci * 100).toFixed(2)}% · ${verdict}</div>`;
@@ -951,7 +977,7 @@ function softCfg(){
 }
 
 function ladder(c, mode, steps){
-  const st = makeStrategy(c.strategy, c.unit, c.cap), pay = c.side === "banker" ? 0.95 : 1;
+  const st = makeStrategy(c.strategy, c.unit, c.cap), pay = payOf(c.side === "banker" ? "B" : "P");
   let bal = c.balance; const out = [];
   for (let k = 0; k < steps; k++) {
     const bet = Math.min(st.bet(), bal);
@@ -987,9 +1013,9 @@ function replayLive(c){
     if (mode === "predict" && picks[i] === null) { if (r !== "T") last = r; continue; } // ช่วงข้อมูลตั้งต้น ยังไม่เดิมพัน
     if (bal <= 0.0001) break;
     const bet = Math.min(st.bet(), bal), side = mode === "predict" ? picks[i] : pickSide(c.side, last);
-    let o = "T", d = 0;
+    let o = "T", d = -bet * tieLoss();
     if (r !== "T") {
-      if (r === side) { d = bet * (side === "B" ? 0.95 : 1); o = "W"; } else { d = -bet; o = "L"; }
+      if (r === side) { d = bet * payOf(side); o = "W"; } else { d = -bet; o = "L"; }
     }
     bal += d; if (bal <= 0.0001) bal = 0;
     st.update(o); if (r !== "T") last = r;
@@ -1016,7 +1042,7 @@ function renderLive(){
   const head = Array.from({ length: 8 }, (_, i) => `<th>ตา ${i + 1}</th>`).join("");
   const nextCard = rp.waiting ? `<b style="font-size:1rem">รอข้อมูลครบ ${rp.mn} ตา</b>` : rp.dead ? `<b class="neg">0 (เงินหมด)</b>` : `<b class="bump chip"><span class="coin">${money(rp.nextBet)}</span> ${ballSide(rp.nextSide)}</b>`;
   const tail = rp.rows.slice(-100).reverse().map(x => `<tr><td>${x.i}</td><td>${ballSide(x.r)}</td><td>${ballSide(x.side)}</td><td>${money(x.bet)}</td>
-      <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? "เสมอ" : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
+      <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? (x.d ? "เสมอ " + signed(Math.round(x.d * 100) / 100) : "เสมอ") : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
   box.innerHTML = `
     <div class="stats">
       <div class="stat"><b>${money(c.balance)}</b><span>ยอดเริ่มต้น</span></div>
@@ -1047,9 +1073,9 @@ function renderLive(){
         <tr><td>ชนะติดกัน คงเหลือ</td>${cells(W, x => `<span class="pos">${money(Math.round(x.bal * 100) / 100)}</span>`)}</tr>
       </tbody></table></div>
     <h3>เดินตามผลจริงทีละตา</h3>
-    ${rp.mode === "predict" ? `<p class="note">ข้อมูล ${rp.mn} ตาแรกเป็นข้อมูลตั้งต้น ยังไม่มีเดิมพัน เริ่มแทงตั้งแต่ตาที่ ${rp.mn + 1} โดยแทงฝั่งที่ระบบคาดการณ์ ถูก = กลับไปเดิมพันเริ่มต้น พลาด = ขึ้นตามกลยุทธ์ เสมอ = คืนเงินและเดิมพันเท่าเดิม</p>` : ""}
+    ${rp.mode === "predict" ? `<p class="note">ข้อมูล ${rp.mn} ตาแรกเป็นข้อมูลตั้งต้น ยังไม่มีเดิมพัน เริ่มแทงตั้งแต่ตาที่ ${rp.mn + 1} โดยแทงฝั่งที่ระบบคาดการณ์ ถูก = กลับไปเดิมพันเริ่มต้น พลาด = ขึ้นตามกลยุทธ์ เสมอ = ${tieDesc()} และเดิมพันเท่าเดิม</p>` : ""}
     ${rp.rows.length ? `<div class="scrollY"><table><thead><tr><th>ตา</th><th>ผลออก</th><th>แทง</th><th>เดิมพัน</th><th>ได้/เสีย</th><th>คงเหลือ</th></tr></thead><tbody>${tail}</tbody></table></div>
-    <p class="note">${rp.rows.length > 100 ? "แสดง 100 ตาล่าสุด (ใหม่สุดอยู่บน) " : ""}เสมอ = คืนเงินเดิมพัน ตัวเลขนี้เป็นการเล่นสมมติตามข้อมูลที่กรอก ไม่ใช่การบอกว่าจะเกิดอะไรต่อ</p>`
+    <p class="note">${rp.rows.length > 100 ? "แสดง 100 ตาล่าสุด (ใหม่สุดอยู่บน) " : ""}เสมอ = ${tieDesc()} ตัวเลขนี้เป็นการเล่นสมมติตามข้อมูลที่กรอก ไม่ใช่การบอกว่าจะเกิดอะไรต่อ</p>`
     : '<p class="note">ยังไม่มีข้อมูลผลจริง ตารางนี้จะเดินตามผลที่คุณกรอกใน Data Lab</p>'}`;
   buildLiveCurves(c, rp);
   drawLiveChart(true);
@@ -1213,7 +1239,7 @@ const hookOn = () => /^https?:\/\//i.test((meta.hook || "").trim());
 
 function boardPayload(b){
   const c = countsOf(b.results);
-  return { id: b.id, name: b.name, tag: b.tag, finished_at: b.at, hands: b.results.length, counts: c, results: b.results };
+  return { game: GAME === "dt" ? "dragon_tiger" : "baccarat", id: b.id, name: b.name, tag: b.tag, finished_at: b.at, hands: b.results.length, counts: c, results: b.results };
 }
 
 async function postHook(payload){
@@ -1357,6 +1383,7 @@ function loadProvider(p){
   $("modelList").innerHTML = c.models.map(m => `<option value="${m}"></option>`).join("");
 }
 async function aiCall(system, prompt, maxTokens){
+  system = gameText(system); prompt = gameText(prompt);
   const p = curProv(), c = PROV[p], key = $("apiKey").value.trim(), model = $("model").value.trim() || c.model;
   if (!key) throw new Error('กรอก API key ในส่วน "ให้ AI ช่วยวิเคราะห์" ด้านล่างของหน้าก่อน');
   if ($("rememberKey").checked) store.set(c.keyName, key); else store.del(c.keyName);
@@ -1413,9 +1440,9 @@ function playSeq(seq, c, mode, mn, keepRows){
     else side = pickSide(c.side, last);
     if (side && !bust) {
       const bet = Math.min(st.bet(), bal);
-      let o = "T", d = 0;
+      let o = "T", d = -bet * tieLoss();
       if (r !== "T") {
-        if (r === side) { d = bet * (side === "B" ? 0.95 : 1); o = "W"; w++; } else { d = -bet; o = "L"; l++; }
+        if (r === side) { d = bet * payOf(side); o = "W"; w++; } else { d = -bet; o = "L"; l++; }
       } else tie++;
       bal += d; bets++; maxBet = Math.max(maxBet, bet);
       if (bal <= 0.0001) { bal = 0; bust = true; }
@@ -1496,7 +1523,7 @@ function renderFillSample(){
   const r = playSeq(f.seqs[f.sampleIdx].split(""), f.c, f.mode, f.mn, true);
   const ball = s => `<span class="ball sm ${s}">${s}</span>`;
   const body = r.rows.map(x => `<tr><td>${x.i}</td><td>${x.i <= f.base.length ? "จริง" : "จำลอง"}</td><td>${ball(x.r)}</td><td>${ball(x.side)}</td><td>${money(x.bet)}</td>
-    <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? "เสมอ" : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
+    <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? (x.d ? "เสมอ " + signed(Math.round(x.d * 100) / 100) : "เสมอ") : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
   box.innerHTML = r.rows.length ? `<div class="scrollY"><table><thead><tr><th>ตา</th><th>ที่มา</th><th>ผลออก</th><th>แทง</th><th>เดิมพัน</th><th>ได้/เสีย</th><th>คงเหลือ</th></tr></thead><tbody>${body}</tbody></table></div>
     <p class="note">เกมตัวอย่างจบที่ ${money(Math.round(r.bal * 100) / 100)} ชนะ ${r.w} แพ้ ${r.l} เสมอ ${r.tie}</p>` : '<p class="note">เกมนี้ไม่มีตาที่ได้เดิมพัน</p>';
   drawFillChart();
@@ -1517,7 +1544,7 @@ function renderFill(){
     ["เกมที่จำลอง", n, ""],
     ["อัตราชนะ (ไม่นับเสมอ)", rate(W, W + L), ""],
     ["อัตราแพ้ (ไม่นับเสมอ)", rate(L, W + L), ""],
-    ["เสมอ (คืนเงินเดิมพัน)", rate(T, bets), ""],
+    ["เสมอ (" + tieDesc() + ")", rate(T, bets), ""],
     ["ยอดสุดท้ายเฉลี่ย", money(Math.round(mean * 100) / 100) + ` (${signed(Math.round(dm * 100) / 100)})`, dm >= 0 ? "pos" : "neg"],
     ["ยอดสุดท้ายมัธยฐาน", money(Math.round(med * 100) / 100), med >= c.balance ? "pos" : "neg"],
     ["เกมที่จบด้วยกำไร", pc(profitPct), "pos"],
@@ -1732,18 +1759,18 @@ $("boardList").addEventListener("click", e => {
     boards = boards.filter(x => x !== b); saveBoards(); renderData();
   }
 });
-const SIM_IDS = ["balance", "target", "unit", "cap", "maxHands", "sessions", "strategy", "side", "source"];
+const SIM_IDS = ["balance", "target", "unit", "cap", "maxHands", "sessions", "strategy", "side", "source", "tieRule"];
 $("exportBoards").onclick = () => {
   const sim = {}; SIM_IDS.forEach(id => { sim[id] = $(id).value; });
   const backup = {
-    app: "baccarat-simulator", version: 2, exported: new Date().toISOString(),
+    app: "baccarat-simulator", game: GAME === "dt" ? "dragon_tiger" : "baccarat", version: 2, exported: new Date().toISOString(),
     boards,
     current: { results: data.join(""), name: meta.name || "", tag: meta.tag || "" },
     settings: { sim, boardTarget: meta.target, autoEnd: !!meta.auto, patternK: meta.k, minN: $("minN").value, liveSide: $("liveSide").value }
   };
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 1)], { type: "application/json" }));
-  a.download = "baccarat_backup_" + new Date().toISOString().slice(0, 10) + ".json";
+  a.download = (GAME === "dt" ? "dragontiger_backup_" : "baccarat_backup_") + new Date().toISOString().slice(0, 10) + ".json";
   a.click(); URL.revokeObjectURL(a.href);
   $("backupStatus").textContent = `ดาวน์โหลดแล้ว: ${boards.length} กระดาน + กระดานปัจจุบัน ${data.length} ตา`;
 };
@@ -1754,6 +1781,8 @@ $("boardFile").onchange = async e => {
   const st = $("backupStatus"), clean = s => String(s || "").toUpperCase().split("").filter(x => "BPT".includes(x)).join("");
   let j;
   try { j = JSON.parse(await f.text()); } catch { st.textContent = "อ่านไฟล์ไม่ได้ ต้องเป็นไฟล์ JSON ที่ดาวน์โหลดจากหน้านี้"; return; }
+  const bkGame = j && j.game === "dragon_tiger" ? "dt" : "bac";
+  if (!Array.isArray(j) && bkGame !== GAME && !confirm("ไฟล์สำรองนี้เป็นของ" + (bkGame === "dt" ? "เสือมังกร" : "บาคาร่า") + " แต่ตอนนี้อยู่โหมด" + (GAME === "dt" ? "เสือมังกร" : "บาคาร่า") + " ต้องการนำเข้าต่อหรือไม่?")) { st.textContent = "ยกเลิกการนำเข้า"; return; }
   const list = Array.isArray(j) ? j : Array.isArray(j.boards) ? j.boards : [];
   const cur = j && j.current && typeof j.current === "object" ? clean(j.current.results)
     : (!Array.isArray(j) && j && j.results ? clean(Array.isArray(j.results) ? j.results.join("") : j.results) : "");
@@ -1885,7 +1914,7 @@ $("askAI").onclick = askAI;
 const syncSide = () => { const v = $("liveSide").value; if (v === "predict" && $("side").value !== "predict") $("side").value = "predict"; else if (v === "setting" && $("side").value === "predict") $("side").value = "banker"; };
 $("liveSide").onchange = () => { syncSide(); store.set("bacc_liveSide", $("liveSide").value); if (window.cfgRefresh) window.cfgRefresh(); renderPredict(); renderLive(); };
 $("side").addEventListener("change", () => { const v = $("side").value === "predict" ? "predict" : "setting"; $("liveSide").value = v; store.set("bacc_liveSide", v); });
-["balance", "target", "unit", "cap", "strategy", "side"].forEach(id => { const f = () => { renderLive(); renderPredict(); }; $(id).addEventListener("input", f); $(id).addEventListener("change", f); });
+["balance", "target", "unit", "cap", "strategy", "side", "tieRule"].forEach(id => { const f = () => { renderLive(); renderPredict(); }; $(id).addEventListener("input", f); $(id).addEventListener("change", f); });
 window.addEventListener("resize", () => { if (rows.length) drawChart(rows.map(x => x.profit)); });
 renderData();
 
@@ -1917,11 +1946,11 @@ renderData();
 
 /* ---- ตั้งค่ากลยุทธ์และยอดเงิน (ป๊อปอัพ ตกลง = บันทึกแล้วปิด) ---- */
 (function(){
-  const IDS = ["balance", "unit", "cap", "strategy", "side"], dlg = $("cfgDlg"), KEY = "bacc_cfg";
+  const IDS = ["balance", "unit", "cap", "strategy", "side", "tieRule"], dlg = $("cfgDlg"), KEY = "bacc_cfg";
   const txt = id => { const el = $(id); return el.tagName === "SELECT" ? el.options[el.selectedIndex].text : el.value; };
   const save = () => { const o = {}; IDS.forEach(id => { o[id] = $(id).value; }); store.set(KEY, JSON.stringify(o)); };
   function summary(){
-    const c = ["ยอดเริ่มต้น " + money(parseFloat($("balance").value) || 0), "หน่วย " + $("unit").value, "เพดาน " + $("cap").value, txt("strategy"), "แทง " + txt("side")];
+    const c = ["ยอดเริ่มต้น " + money(parseFloat($("balance").value) || 0), "หน่วย " + $("unit").value, "เพดาน " + $("cap").value, txt("strategy"), "แทง " + txt("side")].concat(GAME === "dt" ? ["เสมอ: " + txt("tieRule")] : []);
     document.querySelectorAll(".cfgSum").forEach(el => { el.innerHTML = c.map(x => `<span class="chip">${esc(x)}</span>`).join(""); });
   }
   const fire = () => IDS.forEach(id => { $(id).dispatchEvent(new Event("input", { bubbles: true })); $(id).dispatchEvent(new Event("change", { bubbles: true })); });
@@ -1943,6 +1972,23 @@ renderData();
   summary();
   if (typeof renderLive === "function") { renderLive(); renderPredict(); }
 })();
+
+/* ---------- สลับเกม บาคาร่า / เสือมังกร (ข้อมูลแยกกัน สลับแล้วโหลดหน้าใหม่) ---------- */
+document.querySelectorAll(".gameBtn").forEach(b => {
+  b.setAttribute("aria-pressed", String(b.dataset.game === GAME));
+  b.onclick = () => { if (b.dataset.game === GAME) return; try { localStorage.setItem("bacc_game", b.dataset.game); } catch {} location.reload(); };
+});
+if (GAME === "dt") {
+  document.title = gameText(document.title);
+  const relabel = root => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => /^(SCRIPT|STYLE|TEXTAREA)$/.test(n.parentNode.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (let n = w.nextNode(); n; n = w.nextNode()) { const t = gameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
+  };
+  relabel(document.body);
+  new MutationObserver(ms => { for (const m of ms) { if (m.type === "characterData") { const t = gameText(m.target.nodeValue); if (t !== m.target.nodeValue) m.target.nodeValue = t; } else m.addedNodes.forEach(n => { if (n.nodeType === 3) { const t = gameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; } else if (n.nodeType === 1) relabel(n); }); } })
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+  document.querySelectorAll("[placeholder]").forEach(el => { el.placeholder = gameText(el.placeholder); });
+}
 </script>
 </body>
 </html>
