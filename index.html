@@ -51,7 +51,8 @@ th:first-child,td:first-child{text-align:left}
 th{color:var(--muted);font-weight:600}
 .seq{font-family:ui-monospace,Consolas,monospace;word-break:break-all;background:var(--panel2);border-radius:6px;padding:8px;font-size:.85rem;max-height:90px;overflow:auto}
 .verdict{background:var(--panel2);border-left:4px solid var(--amber);border-radius:6px;padding:8px 12px;margin:10px 0;font-size:.9rem}
-#aiOut,#aiPatOut,#hookStatus{white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:12px;margin-top:10px;font-size:.9rem;min-height:2em}
+#aiOut:empty,#aiPatOut:empty,#hookStatus:empty,#fillAIOut:empty{display:none}
+#aiOut,#aiPatOut,#hookStatus,#fillAIOut{white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:12px;margin-top:10px;font-size:.9rem;min-height:2em}
 
 @property --c{syntax:"<color>";inherits:true;initial-value:#d6455a}
 .ball{--c:var(--red);transition:--c .3s ease;width:26px;height:26px;border-radius:50%;flex:none;color:#fff;font-size:.7rem;font-weight:800;display:grid;place-items:center;
@@ -229,6 +230,29 @@ th{color:var(--muted);font-weight:600}
       </select>
     </div>
     <div id="live"></div>
+  </section>
+
+  <section class="panel" id="fillPanel">
+    <h2>จำลองจบกระดาน (เติมให้ครบ)</h2>
+    <p class="note">เอากระดานที่กำลังเล่น (ผลจริง) มาต่อให้ครบ <b id="fillLen">50</b> ตา โดยสุ่มตาที่เหลือตามสถิติของกระดานที่บันทึกไว้ แล้วแทงตามกลยุทธ์ที่ตั้งไว้ จำลองซ้ำหลายเกมเพื่อดูยอดเงินและอัตราแพ้ชนะ ความยาวกระดานใช้ค่าจากช่อง "เป้าจำนวนตาต่อกระดาน" และเริ่มแทงตามเกณฑ์ "แสดงคาดการณ์เมื่อมีข้อมูลอย่างน้อย"</p>
+    <div class="grid">
+      <div><label for="fillSrc">เติมตาที่เหลือด้วย</label>
+        <select id="fillSrc">
+          <option value="freq" selected>ความถี่ B/P/T จากกระดานที่บันทึก</option>
+          <option value="pattern">รูปแบบย้อนหลัง k ตา จากกระดานที่บันทึก</option>
+          <option value="theory">ความถี่ทางทฤษฎี</option>
+        </select></div>
+      <div><label for="fillSide">ฝั่งที่แทง</label>
+        <select id="fillSide">
+          <option value="predict" selected>ตามคาดการณ์ของระบบ</option>
+          <option value="setting">ตามช่อง "ฝั่งที่แทง" ด้านบน</option>
+        </select></div>
+      <div><label for="fillRuns">จำนวนเกมที่จำลอง</label><input id="fillRuns" type="number" min="1" max="5000" value="500"></div>
+    </div>
+    <div class="row"><button id="fillGo">จำลองจบกระดาน</button><button class="ghost" id="fillAI">ให้ AI สรุปผล</button></div>
+    <progress id="fillProg" value="0" max="1" hidden></progress>
+    <div id="fillOut"></div>
+    <div id="fillAIOut" aria-live="polite"></div>
   </section>
 
   <div class="btns">
@@ -883,6 +907,7 @@ function finishBoard(auto){
 function renderBoards(){
   const target = meta.target || 50, n = data.length;
   $("boardProg").max = target; $("boardProg").value = Math.min(n, target);
+  $("fillLen").textContent = target;
   $("boardInfo").textContent = `กระดานปัจจุบัน ${n}/${target} ตา` + (n >= target ? " ครบเป้าแล้ว กด \"จบกระดาน\" ได้เลย" : "");
   // tags
   const tags = [...new Set(boards.map(b => b.tag))].sort();
@@ -997,6 +1022,182 @@ async function aiPattern(){
   const btn = $("aiPattern"); btn.disabled = true; out.textContent = "กำลังวิเคราะห์…";
   try {
     out.textContent = await callClaude("คุณเป็นนักสถิติ ตอบภาษาไทย กระชับ เป็นข้อ ๆ: 1) มีรูปแบบใดเบี่ยงเบนจากค่าเฉลี่ยจริงหลังคำนึงถึงการทดสอบหลายครั้งหรือไม่ 2) จัดอันดับรูปแบบที่เอนเอียงมากสุด 3 อันดับพร้อมข้อจำกัด 3) ถ้ารูปแบบปัจจุบันเป็นตามข้อมูล ควรคาดการณ์ B หรือ P และมั่นใจเท่าไรตามความเป็นจริง 4) ข้อมูลพอหรือไม่ ควรเก็บเพิ่มประมาณกี่กระดาน บาคาร่าแต่ละตาเป็นอิสระต่อกัน ห้ามสนับสนุน gambler's fallacy ห้ามบอกว่าชนะแน่หรือมีระบบที่ได้เปรียบ ถ้าไม่มีหลักฐานให้พูดตรง ๆ ว่าไม่มี", prompt, 1400);
+  } catch (e) { out.textContent = "เรียก AI ไม่สำเร็จ: " + e.message; }
+  finally { btn.disabled = false; }
+}
+
+/* ---------- จำลองจบกระดาน (เติมตาที่เหลือด้วยสถิติ) ---------- */
+function playSeq(seq, c, mode, mn, keepRows){
+  const st = makeStrategy(c.strategy, c.unit, c.cap), s = [];
+  let bal = c.balance, last = null, w = 0, l = 0, tie = 0, maxBet = 0, maxBal = bal, bust = false, bets = 0;
+  const curve = new Array(seq.length + 1), rows = keepRows ? [] : null;
+  curve[0] = bal;
+  for (let i = 0; i < seq.length; i++) {
+    const r = seq[i];
+    let side = null;
+    if (mode === "predict") { if (i >= mn && s.length >= 5) side = predictAll(s).pB >= 0.5 ? "B" : "P"; }
+    else side = pickSide(c.side, last);
+    if (side && !bust) {
+      const bet = Math.min(st.bet(), bal);
+      let o = "T", d = 0;
+      if (r !== "T") {
+        if (r === side) { d = bet * (side === "B" ? 0.95 : 1); o = "W"; w++; } else { d = -bet; o = "L"; l++; }
+      } else tie++;
+      bal += d; bets++; maxBet = Math.max(maxBet, bet);
+      if (bal <= 0.0001) { bal = 0; bust = true; }
+      st.update(o);
+      if (keepRows) rows.push({ i: i + 1, r, side, bet, o, d, bal });
+    }
+    if (r !== "T") { s.push(r); last = r; }
+    maxBal = Math.max(maxBal, bal); curve[i + 1] = bal;
+  }
+  return { bal, curve, w, l, tie, maxBet, bust, maxBal, bets, rows };
+}
+
+function fillModel(kind, list, k){
+  const tot = { B: 0, P: 0, T: 0 };
+  list.forEach(b => { const c = countsOf(b.results); tot.B += c.B; tot.P += c.P; tot.T += c.T; });
+  let pT = THEORY.T, pB = THEORY.B / (THEORY.B + THEORY.P);
+  if (kind !== "theory") { pT = tot.T / (tot.B + tot.P + tot.T); pB = tot.B / (tot.B + tot.P); }
+  let map = null;
+  if (kind === "pattern") { map = {}; patternStats(list, k).rows.forEach(r => { map[r.ctx] = r; }); }
+  return { pT, pB, map, k };
+}
+function drawNext(m, s){
+  if (Math.random() < m.pT) return "T";
+  let pB = m.pB;
+  if (m.map && s.length >= m.k) { const r = m.map[s.slice(-m.k).join("")]; if (r && r.n >= 5) pB = r.pB; }
+  return Math.random() < pB ? "B" : "P";
+}
+
+let fillState = null, lastFillSummary = "";
+
+function startFill(){
+  const c = softCfg();
+  if (!c) { alert("กรอกยอดเริ่มต้น หน่วย และเพดานเป็นตัวเลขมากกว่า 0"); return; }
+  const target = meta.target || 50, mn = minN(), mode = $("fillSide").value, kind = $("fillSrc").value;
+  const list = selBoards(), hands = list.reduce((a, b) => a + b.results.length, 0);
+  if (kind !== "theory" && hands < 30) { alert(`ต้องมีกระดานที่บันทึกไว้รวมอย่างน้อย 30 ตา (ตอนนี้ ${hands}) หรือเลือกใช้ความถี่ทางทฤษฎี`); return; }
+  let runs = Math.max(1, Math.min(5000, parseInt($("fillRuns").value, 10) || 500)), note = "";
+  if (data.length >= target) { runs = 1; note = "กระดานปัจจุบันครบความยาวแล้ว จึงคำนวณจากผลจริงเกมเดียว"; }
+  else if (mode === "predict") {
+    const cap = Math.max(20, Math.floor(6e7 / (4 * target * target)));
+    if (runs > cap) { runs = cap; note = `ลดเหลือ ${cap} เกมเพราะกระดานยาว`; }
+  }
+  const model = fillModel(kind, list, meta.k), base = data.slice();
+  fillState = { c, mode, mn, target, kind, model, runs, base, seqs: [], res: [], done: false, note, len: Math.max(target, base.length) };
+  $("fillGo").disabled = true; $("fillOut").innerHTML = "";
+  const pg = $("fillProg"); pg.hidden = false; pg.max = runs; pg.value = 0;
+  const step = () => {
+    const f = fillState, t0 = performance.now();
+    while (f.res.length < runs && performance.now() - t0 < 30) {
+      const seq = base.slice(), s = nonTie(seq);
+      while (seq.length < target) { const x = drawNext(model, s); seq.push(x); if (x !== "T") s.push(x); }
+      f.seqs.push(seq.join("")); f.res.push(playSeq(seq, c, mode, mn, false));
+    }
+    pg.value = f.res.length;
+    if (f.res.length < runs) setTimeout(step, 0); else finishFill();
+  };
+  step();
+}
+
+function finishFill(){
+  const f = fillState, n = f.res.length, len = f.len;
+  $("fillGo").disabled = false; $("fillProg").hidden = true;
+  const finals = f.res.map(r => r.bal), sorted = [...finals].sort((a, b) => a - b);
+  const q = (arr, p) => arr[Math.min(arr.length - 1, Math.round(p * (arr.length - 1)))];
+  f.bands = { p10: [], p50: [], p90: [] };
+  for (let j = 0; j <= len; j++) {
+    const col = f.res.map(r => r.curve[j]).sort((a, b) => a - b);
+    f.bands.p10.push(q(col, 0.1)); f.bands.p50.push(q(col, 0.5)); f.bands.p90.push(q(col, 0.9));
+  }
+  const order = f.res.map((_, i) => i).sort((a, b) => finals[a] - finals[b]);
+  f.order = order; f.sampleIdx = order[Math.floor(n / 2)];
+  f.done = true;
+  renderFill();
+}
+
+function renderFillSample(){
+  const f = fillState, box = $("fillSample"); if (!f || !box) return;
+  const r = playSeq(f.seqs[f.sampleIdx].split(""), f.c, f.mode, f.mn, true);
+  const ball = s => `<span class="ball sm ${s}">${s}</span>`;
+  const body = r.rows.map(x => `<tr><td>${x.i}</td><td>${x.i <= f.base.length ? "จริง" : "จำลอง"}</td><td>${ball(x.r)}</td><td>${ball(x.side)}</td><td>${money(x.bet)}</td>
+    <td class="${x.o === "W" ? "pos" : x.o === "L" ? "neg" : ""}">${x.o === "T" ? "เสมอ" : signed(Math.round(x.d * 100) / 100)}</td><td>${money(Math.round(x.bal * 100) / 100)}</td></tr>`).join("");
+  box.innerHTML = r.rows.length ? `<div class="scrollY"><table><thead><tr><th>ตา</th><th>ที่มา</th><th>ผลออก</th><th>แทง</th><th>เดิมพัน</th><th>ได้/เสีย</th><th>คงเหลือ</th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="note">เกมตัวอย่างจบที่ ${money(Math.round(r.bal * 100) / 100)} ชนะ ${r.w} แพ้ ${r.l} เสมอ ${r.tie}</p>` : '<p class="note">เกมนี้ไม่มีตาที่ได้เดิมพัน</p>';
+  drawFillChart();
+}
+
+function renderFill(){
+  const f = fillState, n = f.res.length, c = f.c;
+  const sum = k => f.res.reduce((a, r) => a + r[k], 0);
+  const W = sum("w"), L = sum("l"), T = sum("tie"), bets = sum("bets");
+  const finals = f.res.map(r => r.bal), mean = finals.reduce((a, b) => a + b, 0) / n;
+  const sorted = [...finals].sort((a, b) => a - b), med = sorted[Math.floor(n / 2)];
+  const profitPct = finals.filter(x => x > c.balance + 0.0001).length / n, bustPct = f.res.filter(r => r.bust).length / n;
+  const touch = f.res.filter(r => r.maxBal >= c.target).length / n;
+  const rate = (a, b) => b ? pc(a / b) : "–";
+  const dm = mean - c.balance;
+  const srcName = { freq: "ความถี่จากกระดานที่บันทึก", pattern: `รูปแบบย้อนหลัง ${meta.k} ตาจากกระดานที่บันทึก`, theory: "ความถี่ทางทฤษฎี" }[f.kind];
+  const items = [
+    ["เกมที่จำลอง", n, ""],
+    ["อัตราชนะ (ไม่นับเสมอ)", rate(W, W + L), ""],
+    ["อัตราแพ้ (ไม่นับเสมอ)", rate(L, W + L), ""],
+    ["เสมอ (คืนเงินเดิมพัน)", rate(T, bets), ""],
+    ["ยอดสุดท้ายเฉลี่ย", money(Math.round(mean * 100) / 100) + ` (${signed(Math.round(dm * 100) / 100)})`, dm >= 0 ? "pos" : "neg"],
+    ["ยอดสุดท้ายมัธยฐาน", money(Math.round(med * 100) / 100), med >= c.balance ? "pos" : "neg"],
+    ["เกมที่จบด้วยกำไร", pc(profitPct), "pos"],
+    ["เกมที่เงินหมด", pc(bustPct), "neg"],
+    ["แตะยอดเป้าหมายระหว่างเกม", pc(touch), ""],
+    ["เดิมพันสูงสุดที่เจอ", money(Math.max(...f.res.map(r => r.maxBet))), ""],
+    ["ตาที่ได้เดิมพันเฉลี่ย/เกม", (bets / n).toFixed(1), ""],
+  ];
+  lastFillSummary = `จำลองจบกระดานยาว ${f.target} ตา (ผลจริงที่มีอยู่ ${f.base.length} ตา) ${n} เกม; เติมตาที่เหลือด้วย ${srcName}; ฝั่งที่แทง ${f.mode === "predict" ? "ตามคาดการณ์ของระบบ (เริ่มแทงหลังตาที่ " + f.mn + ")" : "ตามค่าตั้ง " + c.side}; กลยุทธ์ ${c.strategy} หน่วย ${c.unit} เพดาน ${c.cap} ยอดเริ่ม ${c.balance}\n` + items.map(([l, v]) => `${l}: ${v}`).join("\n");
+  $("fillOut").innerHTML = `
+    <div class="stats" style="margin-top:12px">${items.map(([l, v, k]) => `<div class="stat"><b class="${k}">${v}</b><span>${l}</span></div>`).join("")}</div>
+    ${f.note ? `<p class="note">${f.note}</p>` : ""}
+    <h3>ยอดเงินตลอดกระดาน</h3>
+    <canvas id="fillChart"></canvas>
+    <p class="note">แถบน้ำเงิน = ช่วง 10–90% ของทุกเกม · เส้นน้ำเงิน = มัธยฐาน · เส้นแดง = เกมตัวอย่าง · เส้นประส้ม = ยอดเริ่มต้น${f.mode === "predict" ? " · เส้นจุดเทา = ตาที่เริ่มแทง" : ""}</p>
+    <h3>เกมตัวอย่าง</h3>
+    <div class="row"><button class="ghost" id="fillSampleBtn">สุ่มเกมตัวอย่างอื่น</button></div>
+    <div id="fillSample"></div>
+    <p class="note">ตาที่เติมสุ่มตามสถิติ จึงไม่มีรูปแบบจริงให้การคาดการณ์จับได้ ถ้าอัตราชนะใกล้ 50% และยอดเฉลี่ยติดลบ แปลว่าการคาดการณ์ไม่ได้ช่วยให้ได้เปรียบ ผลนี้ใช้ดูความเสี่ยงและการขึ้นลงของยอดเงินตามกลยุทธ์ ไม่ใช่การทำนายว่ากระดานจริงจะออกอะไร</p>`;
+  renderFillSample();
+}
+
+function drawFillChart(){
+  const f = fillState, cv = $("fillChart");
+  if (!f || !f.done || !cv) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement), cl = nm => css.getPropertyValue(nm).trim();
+  const sample = f.res[f.sampleIdx].curve, b = f.bands, len = f.len;
+  let lo = Math.min(...b.p10, ...sample, f.c.balance), hi = Math.max(...b.p90, ...sample, f.c.balance);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const padL = 48, padR = 8, padT = 10, padB = 8;
+  const X = i => padL + i / len * (w - padL - padR), Y = v => padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
+  g.fillStyle = cl("--blue"); g.globalAlpha = 0.18; g.beginPath();
+  for (let i = 0; i <= len; i++) i ? g.lineTo(X(i), Y(b.p90[i])) : g.moveTo(X(i), Y(b.p90[i]));
+  for (let i = len; i >= 0; i--) g.lineTo(X(i), Y(b.p10[i]));
+  g.closePath(); g.fill(); g.globalAlpha = 1;
+  g.lineWidth = 1; g.strokeStyle = cl("--amber"); g.setLineDash([5, 4]); g.beginPath(); g.moveTo(padL, Y(f.c.balance)); g.lineTo(w - padR, Y(f.c.balance)); g.stroke();
+  if (f.mode === "predict" && f.mn < len) { g.strokeStyle = cl("--muted"); g.setLineDash([2, 4]); g.beginPath(); g.moveTo(X(f.mn), padT); g.lineTo(X(f.mn), h - padB); g.stroke(); }
+  g.setLineDash([]);
+  const line = (arr, col, wd) => { g.strokeStyle = col; g.lineWidth = wd; g.beginPath(); arr.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.stroke(); };
+  line(b.p50, cl("--blue"), 2);
+  line(sample, cl("--red"), 1.5);
+  g.fillStyle = cl("--muted"); g.font = "11px system-ui, sans-serif"; g.textAlign = "right";
+  g.fillText(money(Math.round(hi)), padL - 4, padT + 8); g.fillText(money(Math.round(lo)), padL - 4, h - padB);
+}
+
+async function fillAI(){
+  const out = $("fillAIOut");
+  if (!fillState || !fillState.done) { out.textContent = "กด \"จำลองจบกระดาน\" ก่อน"; return; }
+  const btn = $("fillAI"); btn.disabled = true; out.textContent = "กำลังวิเคราะห์…";
+  try {
+    out.textContent = await callClaude("คุณเป็นนักสถิติ ตอบภาษาไทย กระชับ เป็นข้อ ๆ อธิบายผลจำลองการเดิมพันบาคาร่า: ยอดเงินคาดหวัง ความเสี่ยงเงินหมด ความผันผวนตามกลยุทธ์ที่ใช้ และข้อสังเกตเรื่องเกณฑ์เริ่มแทง บาคาร่ามีความได้เปรียบของเจ้ามือ ผลแต่ละตาเป็นอิสระต่อกัน ตาที่เติมสุ่มตามสถิติ จึงห้ามสรุปว่าการคาดการณ์ทำให้ได้เปรียบ ห้ามสนับสนุน gambler's fallacy และแนะนำการกำหนดงบและเพดานขาดทุนสั้น ๆ", lastFillSummary, 1000);
   } catch (e) { out.textContent = "เรียก AI ไม่สำเร็จ: " + e.message; }
   finally { btn.disabled = false; }
 }
@@ -1229,6 +1430,13 @@ $("boardFile").onchange = async e => {
   saveBoards(); saveMeta(); renderData();
   st.textContent = `กู้คืนสำเร็จ: เพิ่ม ${add} กระดาน${skip ? ` (ข้าม ${skip} ที่ซ้ำหรือว่าง)` : ""}${curMsg}`;
 };
+$("fillGo").onclick = startFill;
+$("fillAI").onclick = fillAI;
+$("fillOut").addEventListener("click", e => {
+  if (e.target.id !== "fillSampleBtn" || !fillState || !fillState.done) return;
+  fillState.sampleIdx = (Math.random() * fillState.res.length) | 0; renderFillSample();
+});
+window.addEventListener("resize", drawFillChart);
 $("askAI").onclick = askAI;
 (function(){ const v = store.get("bacc_liveSide"); if (v === "predict" || v === "setting") $("liveSide").value = v; })();
 $("liveSide").onchange = () => { store.set("bacc_liveSide", $("liveSide").value); renderPredict(); renderLive(); };
