@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baccarat Simulator – ตัวจำลอง ฐานข้อมูล และวิเคราะห์ด้วย AI</title>
+<style>
+:root{
+  --bg:#eef3f4;--panel:#fff;--panel2:#e3ebed;--fg:#14262c;--muted:#5a6f76;
+  --green:#0e9f5c;--red:#d6455a;--amber:#c77d0a;--blue:#2563eb;--line:#c8d5d9;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#16232a;--panel:#1f2f37;--panel2:#2a3d46;--fg:#e8eef0;--muted:#93a8b0;
+  --green:#22c27a;--red:#ef7683;--amber:#f5a524;--blue:#60a5fa;--line:#34484f}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Segoe UI","Noto Sans Thai",system-ui,sans-serif;line-height:1.5;padding:16px}
+main{max-width:760px;margin:0 auto}
+h1{font-size:1.6rem;margin:8px 0 2px;color:var(--green);font-weight:800}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.9rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 16px}
+label{display:block;font-size:.85rem;font-weight:600;color:var(--green);margin-bottom:3px}
+input,select,textarea{width:100%;padding:8px 10px;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px}
+textarea{resize:vertical;min-height:70px}
+input[type=checkbox]{width:auto}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btns{display:flex;gap:10px;margin-bottom:12px}
+button{flex:1;padding:12px;font:inherit;font-weight:700;color:#fff;border:0;border-radius:8px;cursor:pointer;background:var(--blue)}
+button:disabled{opacity:.45;cursor:not-allowed}
+#start{background:var(--green)}#stop{background:var(--red)}#save{background:var(--blue)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.row button{flex:1 1 auto;padding:8px 12px;font-size:.9rem}
+.tB{background:var(--red)}.tP{background:var(--blue)}.tT{background:var(--green)}
+.ghost{background:var(--panel2);color:var(--fg)}
+progress{width:100%;height:10px;accent-color:var(--green);margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--panel2);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.8rem;color:var(--muted)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+h2{font-size:1rem;margin:0 0 8px}
+h3{font-size:.9rem;margin:14px 0 6px}
+canvas{width:100%;height:200px;display:block}
+.note{font-size:.8rem;color:var(--muted)}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600}
+.seq{font-family:ui-monospace,Consolas,monospace;word-break:break-all;background:var(--panel2);border-radius:6px;padding:8px;font-size:.85rem;max-height:90px;overflow:auto}
+.verdict{background:var(--panel2);border-left:4px solid var(--amber);border-radius:6px;padding:8px 12px;margin:10px 0;font-size:.9rem}
+#aiOut{white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:12px;margin-top:10px;font-size:.9rem;min-height:2em}
+@media (max-width:520px){.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Baccarat Simulator</h1>
+  <p class="sub">จำลองไพ่บาคาร่า 8 สำรับ เก็บผลจริงเป็นฐานข้อมูล วิเคราะห์ความน่าจะเป็น และให้ AI ช่วยสรุป ไม่เชื่อมต่อเว็บพนันใด ๆ</p>
+
+  <!-- ===== Data Lab ===== -->
+  <section class="panel" id="lab">
+    <h2>ฐานข้อมูลผลจริง (Data Lab)</h2>
+    <p class="note">บันทึกผลแต่ละตา B = Banker, P = Player, T = Tie ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น</p>
+    <div class="row" role="group" aria-label="เพิ่มผลทีละตา">
+      <button class="tB" id="addB">+ Banker</button>
+      <button class="tP" id="addP">+ Player</button>
+      <button class="tT" id="addT">+ Tie</button>
+      <button class="ghost" id="undo">ลบตาล่าสุด</button>
+    </div>
+    <label for="dataIn">วางข้อมูลหลายตาพร้อมกัน (เช่น BBPTPB… หรือ เจ้ามือ ผู้เล่น เสมอ)</label>
+    <textarea id="dataIn" placeholder="BBPPBTBPBB…"></textarea>
+    <div class="row">
+      <button id="appendData">ต่อท้ายข้อมูล</button>
+      <button class="ghost" id="replaceData">แทนที่ทั้งหมด</button>
+      <button class="ghost" id="importFile">นำเข้าไฟล์</button>
+      <button class="ghost" id="exportData">ส่งออก JSON</button>
+      <button class="ghost" id="clearData">ล้างข้อมูล</button>
+    </div>
+    <input type="file" id="fileIn" accept=".txt,.csv,.json" hidden>
+    <div id="dataInfo" class="note"></div>
+    <div class="seq" id="seqView" aria-label="ข้อมูลล่าสุด"></div>
+    <div id="analysis"></div>
+  </section>
+
+  <section class="panel">
+    <div class="grid">
+      <div><label for="balance">ยอดเริ่มต้น</label><input id="balance" type="number" value="1000" min="1"></div>
+      <div><label for="target">ยอดเป้าหมาย</label><input id="target" type="number" value="1100"></div>
+      <div><label for="unit">เงินเดิมพันต่อหน่วย</label><input id="unit" type="number" value="1" min="0.01" step="any"></div>
+      <div><label for="cap">เพดานเดิมพันต่อตา</label><input id="cap" type="number" value="100" min="1"></div>
+      <div><label for="maxHands">จำนวนตาต่อเซสชัน</label><input id="maxHands" type="number" value="1000" min="1"></div>
+      <div><label for="sessions">จำนวนเซสชัน</label><input id="sessions" type="number" value="2000" min="1"></div>
+      <div><label for="strategy">กลยุทธ์</label>
+        <select id="strategy">
+          <option value="flat">Flat (เท่าเดิม)</option>
+          <option value="martingale" selected>Martingale (ทบเมื่อแพ้)</option>
+          <option value="paroli">Paroli (ทบเมื่อชนะ)</option>
+          <option value="dalembert">D’Alembert</option>
+          <option value="fibonacci">Fibonacci</option>
+          <option value="oscar">Oscar’s Grind</option>
+          <option value="1326">1-3-2-6</option>
+        </select></div>
+      <div><label for="side">ฝั่งที่แทง</label>
+        <select id="side">
+          <option value="banker" selected>Banker</option>
+          <option value="player">Player</option>
+          <option value="follow">ตามผลล่าสุด</option>
+          <option value="counter">สวนผลล่าสุด</option>
+        </select></div>
+      <div style="grid-column:1/-1"><label for="source">แหล่งผลลัพธ์</label>
+        <select id="source">
+          <option value="shoe" selected>จำลองไพ่ 8 สำรับตามกติกา</option>
+          <option value="empirical">สุ่มตามความถี่ของข้อมูลจริง (B/P/T)</option>
+          <option value="replay">เล่นซ้ำข้อมูลจริงตามลำดับ (backtest)</option>
+        </select></div>
+    </div>
+  </section>
+
+  <div class="btns">
+    <button id="start">Start</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="save" disabled>บันทึก CSV</button>
+  </div>
+  <progress id="prog" value="0" max="1"></progress>
+
+  <section class="panel" id="results" hidden>
+    <h2>สรุปผล</h2>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section class="panel" id="chartBox" hidden>
+    <h2>การกระจายของกำไร/ขาดทุนต่อเซสชัน</h2>
+    <canvas id="chart"></canvas>
+    <p class="note" id="axis"></p>
+  </section>
+
+  <!-- ===== AI ===== -->
+  <section class="panel">
+    <h2>ให้ AI ช่วยวิเคราะห์</h2>
+    <p class="note">ส่งสถิติสรุปของข้อมูลจริง ค่าตั้งต้น และผลจำลองล่าสุดไปยัง Anthropic API (ต้องใช้ API key ของคุณเอง การเรียกจะออกจากเบราว์เซอร์ของคุณโดยตรง)</p>
+    <div class="grid">
+      <div><label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
+      <div><label for="model">โมเดล</label><input id="model" value="claude-sonnet-5-5"></div>
+    </div>
+    <label style="margin-top:8px;font-weight:400"><input type="checkbox" id="rememberKey"> จำ key ไว้ในเบราว์เซอร์นี้ (ไม่แนะนำบนเครื่องที่ใช้ร่วมกัน)</label>
+    <label for="aiQ" style="margin-top:8px">คำถามเพิ่มเติม (ไม่บังคับ)</label>
+    <textarea id="aiQ" placeholder="เช่น กลยุทธ์ไหนเสี่ยงล้มละลายน้อยสุดกับค่าตั้งนี้?"></textarea>
+    <div class="row"><button id="askAI">วิเคราะห์ด้วย AI</button></div>
+    <div id="aiOut" aria-live="polite"></div>
+  </section>
+
+  <p class="note">ผลจำลองเป็นเพียงการทดลองทางสถิติ บาคาร่ามีความได้เปรียบของเจ้ามือเสมอ ไม่มีกลยุทธ์หรือรูปแบบในอดีตที่เปลี่ยนค่าคาดหวังหรือทำนายตาถัดไปได้ ตัว Data Lab มีไว้ทดสอบข้อสันนิษฐานนั้น</p>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const CARDS = [1,2,3,4,5,6,7,8,9,0,0,0,0];
+const FIB = [1,1,2,3,5,8,13,21,34,55,89];
+const THEORY = { B: 0.458597, P: 0.446247, T: 0.095156 };
+const NAMES = { B: "Banker", P: "Player", T: "Tie" };
+
+/* ---------- storage (guarded) ---------- */
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
+};
+
+/* ---------- Game engine ---------- */
+class Shoe {
+  constructor(){ this.shuffle(); }
+  shuffle(){
+    const c = [];
+    for (let d = 0; d < 32; d++) for (const v of CARDS) c.push(v);
+    for (let i = c.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [c[i], c[j]] = [c[j], c[i]];
+    }
+    this.cards = c;
+  }
+  draw(){ return this.cards.pop(); }
+  low(){ return this.cards.length < 14; }
+}
+
+function playHand(s){
+  const p = [s.draw(), s.draw()], b = [s.draw(), s.draw()];
+  let pt = (p[0] + p[1]) % 10, bt = (b[0] + b[1]) % 10;
+  if (pt < 8 && bt < 8) {
+    let p3 = null;
+    if (pt <= 5) { p3 = s.draw(); p.push(p3); }
+    if (p3 === null) {
+      if (bt <= 5) b.push(s.draw());
+    } else {
+      let d = false;
+      if (bt <= 2) d = true;
+      else if (bt === 3) d = p3 !== 8;
+      else if (bt === 4) d = p3 >= 2 && p3 <= 7;
+      else if (bt === 5) d = p3 >= 4 && p3 <= 7;
+      else if (bt === 6) d = p3 === 6 || p3 === 7;
+      if (d) b.push(s.draw());
+    }
+    pt = p.reduce((a, x) => a + x, 0) % 10;
+    bt = b.reduce((a, x) => a + x, 0) % 10;
+  }
+  return pt > bt ? "P" : bt > pt ? "B" : "T";
+}
+
+/* ---------- Betting strategies ---------- */
+function makeStrategy(name, unit, cap){
+  const st = { level: 1, idx: 0, streak: 0, seq: 0, profit: 0 };
+  const SEQ = [1, 3, 2, 6];
+  st.bet = () => Math.min(st.level * unit, cap);
+  st.update = o => {
+    if (o === "T") return;
+    st.streak = o === "L" ? st.streak + 1 : 0;
+    if (name === "martingale") st.level = o === "L" ? st.level * 2 : 1;
+    else if (name === "paroli") st.level = o === "W" ? (st.level < 4 ? st.level * 2 : 1) : 1;
+    else if (name === "dalembert") st.level = o === "L" ? st.level + 1 : Math.max(1, st.level - 1);
+    else if (name === "fibonacci") {
+      st.idx = o === "L" ? Math.min(st.idx + 1, FIB.length - 1) : Math.max(0, st.idx - 2);
+      st.level = FIB[st.idx];
+    }
+    else if (name === "1326") {
+      st.seq = o === "W" ? (st.seq + 1) % 4 : 0;
+      st.level = SEQ[st.seq];
+    }
+    else if (name === "oscar") {
+      // Oscar's Grind: เป้า +1 หน่วยต่อรอบ เพิ่ม 1 หน่วยเมื่อชนะ (ไม่เกินที่ทำให้เกินเป้ารอบ)
+      st.profit += o === "W" ? st.level : -st.level;
+      if (st.profit >= 1) { st.profit = 0; st.level = 1; }
+      else if (o === "W") st.level = Math.min(st.level + 1, 1 - st.profit);
+    }
+  };
+  return st;
+}
+
+function pickSide(mode, last){
+  if (mode === "banker") return "B";
+  if (mode === "player") return "P";
+  if (mode === "follow") return last || "B";
+  return last === "P" ? "B" : last === "B" ? "P" : "B";
+}
+
+/* ---------- Outcome sources ---------- */
+function makeSource(c){
+  if (c.source === "empirical") {
+    const t = c.freq;
+    return () => { const r = Math.random(); return r < t.B ? "B" : r < t.B + t.P ? "P" : "T"; };
+  }
+  if (c.source === "replay") {
+    const d = c.data, room = Math.max(0, d.length - c.maxHands);
+    let i = (Math.random() * (room + 1)) | 0;
+    return () => i < d.length ? d[i++] : null;
+  }
+  const shoe = new Shoe();
+  return () => { if (shoe.low()) shoe.shuffle(); return playHand(shoe); };
+}
+
+function runSession(c){
+  const next = makeSource(c), st = makeStrategy(c.strategy, c.unit, c.cap);
+  let bal = c.balance, peak = bal, dd = 0, last = null, hands = 0, mls = 0, mbet = 0, reason = "max_hands";
+  while (hands < c.maxHands) {
+    if (bal >= c.target) { reason = "target"; break; }
+    const bet = Math.min(st.bet(), bal);
+    if (bet <= 0) { reason = "bust"; break; }
+    const side = pickSide(c.side, last), r = next();
+    if (r === null) { reason = "data_end"; break; }
+    hands++; mbet = Math.max(mbet, bet);
+    let o;
+    if (r === "T") o = "T";
+    else if (r === side) { bal += bet * (side === "B" ? 0.95 : 1); o = "W"; }
+    else { bal -= bet; o = "L"; }
+    st.update(o);
+    mls = Math.max(mls, st.streak);
+    if (r !== "T") last = r;
+    peak = Math.max(peak, bal);
+    dd = Math.max(dd, peak - bal);
+    if (bal <= 0.0001) { bal = 0; reason = "bust"; break; }
+  }
+  const r2 = x => Math.round(x * 100) / 100;
+  return { final_balance: r2(bal), profit: r2(bal - c.balance), hands, reason, max_drawdown: r2(dd), max_loss_streak: mls, max_bet: r2(mbet) };
+}
+
+/* ---------- Data Lab: storage & parsing ---------- */
+let data = [];
+(function loadData(){
+  const raw = store.get("bacc_data");
+  if (raw) data = raw.split("").filter(x => "BPT".includes(x));
+})();
+const saveData = () => store.set("bacc_data", data.join(""));
+
+function parseResults(text){
+  const map = { banker: "B", player: "P", tie: "T", "เจ้ามือ": "B", "ผู้เล่น": "P", "เสมอ": "T", b: "B", p: "P", t: "T" };
+  const m = text.toLowerCase().match(/banker|player|tie|เจ้ามือ|ผู้เล่น|เสมอ|[bpt]/g);
+  return m ? m.map(x => map[x]) : [];
+}
+
+/* ---------- Data Lab: statistics ---------- */
+const phi = z => { // normal CDF (Abramowitz-Stegun)
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp(-z * z / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return z > 0 ? 1 - p : p;
+};
+const fmtP = p => p < 0.001 ? "<0.001" : p.toFixed(3);
+const pc = v => (v * 100).toFixed(2) + "%";
+
+function analyze(d){
+  const n = d.length;
+  const cnt = { B: 0, P: 0, T: 0 };
+  d.forEach(x => cnt[x]++);
+  // chi-square goodness of fit, df = 2 => p = exp(-x/2)
+  let chi = 0;
+  for (const k of "BPT") { const e = n * THEORY[k]; chi += (cnt[k] - e) ** 2 / e; }
+  const chiP = Math.exp(-chi / 2);
+
+  const s = d.filter(x => x !== "T"), m = s.length;
+  const nB = s.filter(x => x === "B").length, nP = m - nB;
+  let runs = m ? 1 : 0;
+  for (let i = 1; i < m; i++) if (s[i] !== s[i - 1]) runs++;
+  let runZ = null, runP = null;
+  if (m >= 20 && nB > 0 && nP > 0) {
+    const mu = 1 + 2 * nB * nP / m;
+    const v = 2 * nB * nP * (2 * nB * nP - m) / (m * m * (m - 1));
+    runZ = (runs - mu) / Math.sqrt(v);
+    runP = 2 * (1 - phi(Math.abs(runZ)));
+  }
+  // transitions among non-tie hands
+  const tr = { B: { B: 0, P: 0 }, P: { B: 0, P: 0 } };
+  for (let i = 1; i < m; i++) tr[s[i - 1]][s[i]]++;
+  // continuation after streak length k
+  const cont = {};
+  let rl = 1;
+  for (let i = 1; i < m; i++) {
+    const k = Math.min(rl, 5);
+    if (!cont[k]) cont[k] = { same: 0, n: 0 };
+    cont[k].n++;
+    if (s[i] === s[i - 1]) cont[k].same++;
+    rl = s[i] === s[i - 1] ? rl + 1 : 1;
+  }
+  let longest = 0; rl = 1;
+  for (let i = 1; i < m; i++) { rl = s[i] === s[i - 1] ? rl + 1 : 1; longest = Math.max(longest, rl); }
+  if (m) longest = Math.max(longest, 1);
+  return { n, cnt, chi, chiP, m, nB, nP, runs, runZ, runP, tr, cont, longest };
+}
+
+let lastAnalysis = null, lastSummary = "";
+
+function renderData(){
+  const n = data.length;
+  $("dataInfo").textContent = n ? `ข้อมูลทั้งหมด ${n} ตา` : "ยังไม่มีข้อมูล เพิ่มผลทีละตาหรือวางข้อมูลด้านบน";
+  $("seqView").textContent = n ? data.slice(-300).join(" ") + (n > 300 ? "  (แสดง 300 ตาล่าสุด)" : "") : "—";
+  $("undo").disabled = !n;
+  const box = $("analysis");
+  if (n < 10) { lastAnalysis = null; box.innerHTML = n ? '<p class="note">ต้องมีข้อมูลอย่างน้อย 10 ตาเพื่อวิเคราะห์ (แนะนำ 500+ ตา)</p>' : ""; return; }
+  const a = analyze(n ? data : []);
+  lastAnalysis = a;
+  const rowsF = "BPT".map(k => `<tr><td>${NAMES[k]}</td><td>${a.cnt[k]}</td><td>${pc(a.cnt[k] / n)}</td><td>${pc(THEORY[k])}</td><td>${((a.cnt[k] / n - THEORY[k]) * 100).toFixed(2)}</td></tr>`).join("");
+  const sg = a.chiP < 0.05;
+  const rg = a.runP !== null && a.runP < 0.05;
+  const rowsT = ["B", "P"].map(k => {
+    const t = a.tr[k], tot = t.B + t.P;
+    return `<tr><td>หลังออก ${NAMES[k]}</td><td>${tot}</td><td>${tot ? pc(t.B / tot) : "–"}</td><td>${tot ? pc(t.P / tot) : "–"}</td></tr>`;
+  }).join("");
+  const rowsC = Object.keys(a.cont).sort().map(k => {
+    const c = a.cont[k];
+    return `<tr><td>ออกซ้ำ ${k}${k == 5 ? "+" : ""} ครั้ง</td><td>${c.n}</td><td>${pc(c.same / c.n)}</td><td>${pc(1 - c.same / c.n)}</td></tr>`;
+  }).join("");
+  box.innerHTML = `
+    <h3>ความถี่เทียบค่าทางทฤษฎี (8 สำรับ)</h3>
+    <div class="tblwrap"><table><thead><tr><th>ผล</th><th>จำนวน</th><th>จริง</th><th>ทฤษฎี</th><th>ต่าง (จุด%)</th></tr></thead><tbody>${rowsF}</tbody></table></div>
+    <div class="verdict">Chi-square = ${a.chi.toFixed(2)} (df 2), p = ${fmtP(a.chiP)} → ${sg ? "ความถี่ต่างจากทฤษฎีอย่างมีนัยสำคัญ ควรตรวจว่าข้อมูลครบและถูกต้อง" : "ไม่พบความต่างจากทฤษฎีอย่างมีนัยสำคัญ"}</div>
+    <h3>ความสัมพันธ์ระหว่างตา (ไม่นับ Tie)</h3>
+    <p class="note">ตัดผลเสมอออก เหลือ ${a.m} ตา แบ่งเป็นกลุ่ม (run) ${a.runs} กลุ่ม ออกซ้ำยาวสุด ${a.longest} ตา${a.runP !== null ? ` · runs test z = ${a.runZ.toFixed(2)}, p = ${fmtP(a.runP)} → ${rg ? "ลำดับไม่ได้สุ่มอย่างสมบูรณ์ (ตรวจสอบที่มาของข้อมูล)" : "ลำดับสอดคล้องกับการสุ่ม"}` : ""}</p>
+    <div class="tblwrap"><table><thead><tr><th>เงื่อนไข</th><th>n</th><th>ตาถัดไป B</th><th>ตาถัดไป P</th></tr></thead><tbody>${rowsT}</tbody></table></div>
+    <h3>โอกาสออกซ้ำหลังออกติดกัน (คาดตามทฤษฎีประมาณ 50%)</h3>
+    <div class="tblwrap"><table><thead><tr><th>เงื่อนไข</th><th>n</th><th>ซ้ำอีก</th><th>เปลี่ยนฝั่ง</th></tr></thead><tbody>${rowsC}</tbody></table></div>
+    <p class="note">ถ้าทดสอบหลายอย่างพร้อมกัน บางค่าจะดูผิดปกติได้โดยบังเอิญ (multiple testing) ข้อมูลน้อยกว่าหลายร้อยตาจึงยังสรุปอะไรไม่ได้</p>`;
+  lastSummary = `ข้อมูลจริง ${n} ตา: B=${a.cnt.B} P=${a.cnt.P} T=${a.cnt.T}; chi-square=${a.chi.toFixed(2)} p=${fmtP(a.chiP)}; ` +
+    `ไม่นับ Tie ${a.m} ตา มี ${a.runs} runs, ซ้ำยาวสุด ${a.longest}` + (a.runP !== null ? `, runs-test z=${a.runZ.toFixed(2)} p=${fmtP(a.runP)}` : "") +
+    `; หลัง B→B ${a.tr.B.B}/${a.tr.B.B + a.tr.B.P}, หลัง P→P ${a.tr.P.P}/${a.tr.P.B + a.tr.P.P}` +
+    `; 100 ตาล่าสุด: ${data.slice(-100).join("")}`;
+}
+
+function addResults(arr){
+  if (!arr.length) { alert("ไม่พบข้อมูลที่อ่านได้ (ใช้ B, P, T หรือ เจ้ามือ/ผู้เล่น/เสมอ)"); return; }
+  data = data.concat(arr); saveData(); renderData();
+}
+$("addB").onclick = () => addResults(["B"]);
+$("addP").onclick = () => addResults(["P"]);
+$("addT").onclick = () => addResults(["T"]);
+$("undo").onclick = () => { data.pop(); saveData(); renderData(); };
+$("appendData").onclick = () => { addResults(parseResults($("dataIn").value)); $("dataIn").value = ""; };
+$("replaceData").onclick = () => {
+  const a = parseResults($("dataIn").value);
+  if (!a.length) { alert("ไม่พบข้อมูลที่อ่านได้"); return; }
+  if (data.length && !confirm("แทนที่ข้อมูลเดิม " + data.length + " ตา?")) return;
+  data = a; saveData(); renderData(); $("dataIn").value = "";
+};
+$("clearData").onclick = () => { if (data.length && confirm("ล้างข้อมูลทั้งหมด?")) { data = []; saveData(); renderData(); } };
+$("importFile").onclick = () => $("fileIn").click();
+$("fileIn").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  let txt = await f.text();
+  try { const j = JSON.parse(txt); if (Array.isArray(j.results)) txt = j.results.join(""); else if (Array.isArray(j)) txt = j.join(""); } catch {}
+  addResults(parseResults(txt)); e.target.value = "";
+};
+$("exportData").onclick = () => {
+  if (!data.length) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ exported: new Date().toISOString(), count: data.length, results: data })], { type: "application/json" }));
+  a.download = "baccarat_data.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* ---------- Simulation runner ---------- */
+let rows = [], stopFlag = false, lastCfg = null, lastSimText = "";
+
+function readCfg(){
+  const n = id => parseFloat($(id).value);
+  const c = { balance: n("balance"), target: n("target"), unit: n("unit"), cap: n("cap"),
+    maxHands: n("maxHands"), sessions: n("sessions"), strategy: $("strategy").value, side: $("side").value, source: $("source").value };
+  const ok = [c.balance, c.unit, c.cap, c.maxHands, c.sessions].every(v => Number.isFinite(v) && v > 0) && Number.isFinite(c.target);
+  if (!ok) { alert("กรุณากรอกตัวเลขให้ครบ และค่าต้องมากกว่า 0"); return null; }
+  if (c.source !== "shoe") {
+    const need = c.source === "replay" ? 10 : 30;
+    if (data.length < need) { alert(`แหล่งข้อมูลนี้ต้องมีข้อมูลจริงอย่างน้อย ${need} ตา (ตอนนี้มี ${data.length})`); return null; }
+    c.data = data.slice();
+    const k = { B: 0, P: 0, T: 0 }; data.forEach(x => k[x]++);
+    c.freq = { B: k.B / data.length, P: k.P / data.length, T: k.T / data.length };
+  }
+  return c;
+}
+
+function start(){
+  const c = readCfg();
+  if (!c) return;
+  lastCfg = c; rows = []; stopFlag = false;
+  $("start").disabled = true; $("stop").disabled = false; $("save").disabled = true;
+  $("prog").max = c.sessions; $("prog").value = 0;
+  const step = () => {
+    const t0 = performance.now();
+    while (rows.length < c.sessions && !stopFlag && performance.now() - t0 < 30) rows.push(runSession(c));
+    $("prog").value = rows.length;
+    if (rows.length < c.sessions && !stopFlag) setTimeout(step, 0);
+    else finish(c);
+  };
+  step();
+}
+
+function finish(c){
+  $("start").disabled = false; $("stop").disabled = true;
+  if (!rows.length) return;
+  $("save").disabled = false;
+  const n = rows.length, cnt = r => rows.filter(x => x.reason === r).length;
+  const pr = rows.map(x => x.profit), mean = pr.reduce((a, b) => a + b, 0) / n;
+  const sorted = [...pr].sort((a, b) => a - b);
+  const med = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const pct = v => (v / n * 100).toFixed(1) + "%";
+  const sg = v => (v >= 0 ? "+" : "") + v.toFixed(2);
+  const cls = v => v >= 0 ? "pos" : "neg";
+  const items = [
+    ["เซสชันที่จำลอง", n, ""],
+    ["ถึงเป้าหมาย", pct(cnt("target")), "pos"],
+    ["เงินหมด", pct(cnt("bust")), "neg"],
+    ["ครบจำนวนตา", pct(cnt("max_hands")), ""],
+    ...(cnt("data_end") ? [["ข้อมูลหมดก่อน", pct(cnt("data_end")), ""]] : []),
+    ["กำไร/ขาดทุนเฉลี่ย", sg(mean), cls(mean)],
+    ["มัธยฐาน", sg(med), cls(med)],
+    ["แย่สุด", sg(sorted[0]), cls(sorted[0])],
+    ["ดีสุด", sg(sorted[n - 1]), cls(sorted[n - 1])],
+    ["แพ้ติดกันสูงสุด", Math.max(...rows.map(x => x.max_loss_streak)), ""],
+    ["drawdown เฉลี่ย", (rows.reduce((a, x) => a + x.max_drawdown, 0) / n).toFixed(2), ""],
+    ["เดิมพันสูงสุดที่เจอ", Math.max(...rows.map(x => x.max_bet)).toFixed(2), ""],
+    ["จำนวนตาเฉลี่ย", Math.round(rows.reduce((a, x) => a + x.hands, 0) / n), ""],
+  ];
+  $("stats").innerHTML = items.map(([l, v, k]) => `<div class="stat"><b class="${k}">${v}</b><span>${l}</span></div>`).join("");
+  $("results").hidden = false; $("chartBox").hidden = false;
+  const srcName = { shoe: "ไพ่ 8 สำรับตามกติกา", empirical: "สุ่มตามความถี่ข้อมูลจริง", replay: "เล่นซ้ำข้อมูลจริง" }[c.source];
+  lastSimText = `ค่าตั้ง: ยอดเริ่ม ${c.balance}, เป้า ${c.target}, หน่วย ${c.unit}, เพดาน ${c.cap}, ${c.maxHands} ตา/เซสชัน, กลยุทธ์ ${c.strategy}, ฝั่ง ${c.side}, แหล่งผล: ${srcName}\n` +
+    items.map(([l, v]) => `${l}: ${v}`).join("\n");
+  drawChart(pr);
+}
+
+function drawChart(pr){
+  const cv = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const green = css.getPropertyValue("--green").trim(), red = css.getPropertyValue("--red").trim(), amber = css.getPropertyValue("--amber").trim();
+  let lo = Math.min(...pr), hi = Math.max(...pr);
+  if (lo === hi) hi = lo + 1;
+  const B = 30, counts = new Array(B).fill(0);
+  for (const p of pr) counts[Math.min(B - 1, Math.floor((p - lo) / (hi - lo) * B))]++;
+  const m = Math.max(...counts), bw = w / B;
+  counts.forEach((k, i) => {
+    const mid = lo + (i + 0.5) * (hi - lo) / B, bh = (h - 8) * k / m;
+    g.fillStyle = mid >= 0 ? green : red;
+    g.fillRect(i * bw + 1, h - bh, bw - 2, bh);
+  });
+  if (lo < 0 && hi > 0) {
+    const zx = (0 - lo) / (hi - lo) * w;
+    g.strokeStyle = amber; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(zx, 0); g.lineTo(zx, h); g.stroke();
+  }
+  $("axis").textContent = `แกนนอน: กำไร/ขาดทุนต่อเซสชัน จาก ${lo.toFixed(0)} ถึง ${hi.toFixed(0)} (เส้นประ = เท่าทุน)`;
+}
+
+function saveCsv(){
+  const keys = Object.keys(rows[0]);
+  const csv = [keys.join(","), ...rows.map(r => keys.map(k => r[k]).join(","))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" }));
+  a.download = "baccarat_results.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- AI analysis ---------- */
+(function initKey(){
+  const k = store.get("bacc_key");
+  if (k) { $("apiKey").value = k; $("rememberKey").checked = true; }
+  const m = store.get("bacc_model"); if (m) $("model").value = m;
+})();
+
+async function askAI(){
+  const key = $("apiKey").value.trim(), model = $("model").value.trim();
+  const out = $("aiOut");
+  if (!key) { out.textContent = "กรอก API key ก่อน"; return; }
+  if (!lastSummary && !lastSimText) { out.textContent = "ยังไม่มีข้อมูลให้วิเคราะห์ เพิ่มข้อมูลจริงหรือกด Start ก่อน"; return; }
+  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
+  store.set("bacc_model", model);
+  const prompt = `ข้อมูลจริงที่ผู้ใช้เก็บ:\n${lastSummary || "(ยังไม่มี)"}\n\nผลจำลองล่าสุด:\n${lastSimText || "(ยังไม่ได้รัน)"}\n\nคำถามของผู้ใช้: ${$("aiQ").value.trim() || "ช่วยสรุปและวิเคราะห์ภาพรวม ความเสี่ยง และข้อเสนอแนะ"}`;
+  const btn = $("askAI"); btn.disabled = true; out.textContent = "กำลังวิเคราะห์…";
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model, max_tokens: 1500,
+        system: "คุณเป็นนักวิเคราะห์สถิติ ตอบเป็นภาษาไทย กระชับ ตรงไปตรงมา อธิบายตัวเลขที่ได้รับ ชี้ความเสี่ยง (เช่น ความเสี่ยงล้มละลายของกลยุทธ์ทบเงิน) และบอกข้อจำกัดของข้อมูลตัวอย่างน้อย บาคาร่ามีความได้เปรียบของเจ้ามือ และผลแต่ละตาเป็นอิสระต่อกัน ห้ามอ้างว่าทำนายตาถัดไปได้ ห้ามสนับสนุน gambler's fallacy ถ้าผู้ใช้ถามหาวิธีชนะ ให้อธิบายตามจริงว่าค่าคาดหวังติดลบ และแนะนำการกำหนดงบและเพดานขาดทุน",
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
+    out.textContent = (j.content || []).map(b => b.type === "text" ? b.text : "").join("\n") || "(ไม่มีข้อความตอบกลับ)";
+  } catch (e) {
+    out.textContent = "เรียก API ไม่สำเร็จ: " + e.message + "\nตรวจสอบ API key ชื่อโมเดล และการเชื่อมต่ออินเทอร์เน็ต";
+  } finally { btn.disabled = false; }
+}
+
+/* ---------- wiring ---------- */
+$("start").onclick = start;
+$("stop").onclick = () => { stopFlag = true; };
+$("save").onclick = saveCsv;
+$("askAI").onclick = askAI;
+window.addEventListener("resize", () => { if (rows.length) drawChart(rows.map(x => x.profit)); });
+renderData();
+</script>
+</body>
+</html>
