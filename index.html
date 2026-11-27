@@ -208,7 +208,8 @@ th{color:var(--muted);font-weight:600}
     <p class="note">แบ่งกระดานที่เลือกเป็น 2 ชุดแบบคงที่ ชุดแรกใช้สร้างโมเดลจับคู่รูปแบบ ชุดที่สองเป็นกระดานที่ไม่เคยเห็นไว้ทดสอบ แล้วเทียบทุกวิธีกับการแทงฝั่งเดียวทุกตา ผลนี้เชื่อถือได้กว่าการย้อนทดสอบบนกระดานเดียว</p>
     <div class="grid">
       <div><label for="oosSplit">สัดส่วนกระดานที่ใช้สร้างโมเดล</label><select id="oosSplit"><option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option></select></div>
-      <div><label for="oosMax">จำนวนกระดานทดสอบสูงสุด</label><input id="oosMax" type="number" min="10" max="5000" value="500"></div>
+      <div><label for="oosMax">จำนวนกระดานทดสอบรวมสูงสุด</label><input id="oosMax" type="number" min="10" max="20000" value="2000"></div>
+      <div><label for="oosFolds">รูปแบบการแบ่งชุด</label><select id="oosFolds"><option value="1" selected>แบ่งครั้งเดียว (ตามสัดส่วนด้านบน)</option><option value="5">สลับชุด 5 รอบ (ใช้ข้อมูลครบทุกกระดาน)</option></select></div>
     </div>
     <div class="row"><button id="oosGo">เริ่มทดสอบนอกตัวอย่าง</button></div>
     <div id="oosOut"></div>
@@ -663,34 +664,46 @@ async function runOOS(){
   if (oosRunning) return;
   const out = $("oosOut"), list = selBoards().filter(b => b.results.length >= 25);
   if (list.length < 20) { out.innerHTML = '<p class="note">ต้องมีกระดานที่ยาวอย่างน้อย 25 ตาไม่ต่ำกว่า 20 กระดาน (ตอนนี้ ' + list.length + ') ดึงจากฐานข้อมูลก่อนได้</p>'; return; }
-  const pct = parseInt($("oosSplit").value, 10) || 80, maxTest = Math.max(10, parseInt($("oosMax").value, 10) || 500);
-  const train = list.filter(b => hashId(b.id) < pct), testAll = list.filter(b => hashId(b.id) >= pct), test = testAll.slice(0, maxTest);
-  if (train.length < 10 || test.length < 5) { out.innerHTML = '<p class="note">แบ่งชุดแล้วข้อมูลน้อยเกินไป (สร้าง ' + train.length + ' / ทดสอบ ' + test.length + ') เพิ่มกระดานหรือเปลี่ยนสัดส่วน</p>'; return; }
+  const F = parseInt($("oosFolds").value, 10) === 5 ? 5 : 1, pct = parseInt($("oosSplit").value, 10) || 80;
+  const maxTest = Math.max(10, parseInt($("oosMax").value, 10) || 2000), perFold = Math.ceil(maxTest / F);
+  // F=1: ชุดทดสอบ = กระดานที่เหลือจากสัดส่วนสร้างโมเดล / F=5: สลับกัน 5 รอบ ทุกกระดานได้เป็นชุดทดสอบรอบละ 1 ครั้ง
+  const folds = [];
+  for (let f = 0; f < F; f++) {
+    const inTest = b => F === 1 ? hashId(b.id) >= pct : Math.floor(hashId(b.id) / 20) === f;
+    folds.push({ train: list.filter(b => !inTest(b)), test: list.filter(inTest).slice(0, perFold) });
+  }
+  if (folds.some(x => x.train.length < 10 || x.test.length < 5)) { out.innerHTML = '<p class="note">แบ่งชุดแล้วข้อมูลน้อยเกินไป เพิ่มกระดานหรือเปลี่ยนการตั้งค่า</p>'; return; }
   oosRunning = true; $("oosGo").disabled = true;
   const rows = METHODS.map(m => ({ name: m.name, hit: 0 })), comb = { name: "รวมทุกวิธี", hit: 0 }, bank = { name: "แทง Banker ทุกตา (อ้างอิง)", hit: 0 }, play = { name: "แทง Player ทุกตา (อ้างอิง)", hit: 0 };
-  let n = 0, bi = 0;
+  let n = 0, testBoards = 0, trainBoards = 0, trainHands = 0;
   const START = 15;
   try {
-    analogOverride = buildAnalog(train);
-    await new Promise(res => {
-      const step = () => {
-        const t0 = performance.now();
-        while (bi < test.length && performance.now() - t0 < 30) {
-          const s = nonTie(test[bi].results.split(""));
-          for (let i = START; i < s.length; i++) {
-            const h = s.slice(0, i), ps = METHODS.map(m => m.f(h));
-            ps.forEach((p, j) => { if ((p >= 0.5 ? "B" : "P") === s[i]) rows[j].hit++; });
-            if (((ps.reduce((a, b) => a + b, 0) / ps.length) >= 0.5 ? "B" : "P") === s[i]) comb.hit++;
-            if (s[i] === "B") bank.hit++; else play.hit++;
-            n++;
+    for (let fi = 0; fi < F; fi++) {
+      const { train, test } = folds[fi];
+      analogOverride = buildAnalog(train);
+      trainBoards = Math.max(trainBoards, train.length); trainHands = Math.max(trainHands, analogOverride.hands);
+      let bi = 0;
+      await new Promise(res => {
+        const step = () => {
+          const t0 = performance.now();
+          while (bi < test.length && performance.now() - t0 < 30) {
+            const s = nonTie(test[bi].results.split(""));
+            for (let i = START; i < s.length; i++) {
+              const h = s.slice(0, i), ps = METHODS.map(m => m.f(h));
+              ps.forEach((p, j) => { if ((p >= 0.5 ? "B" : "P") === s[i]) rows[j].hit++; });
+              if (((ps.reduce((a, b) => a + b, 0) / ps.length) >= 0.5 ? "B" : "P") === s[i]) comb.hit++;
+              if (s[i] === "B") bank.hit++; else play.hit++;
+              n++;
+            }
+            bi++;
           }
-          bi++;
-        }
-        out.innerHTML = '<p class="note">กำลังทดสอบ ' + bi + '/' + test.length + ' กระดาน…</p>';
-        if (bi < test.length) setTimeout(step, 0); else res();
-      };
-      step();
-    });
+          out.innerHTML = '<p class="note">รอบที่ ' + (fi + 1) + '/' + F + ' กำลังทดสอบ ' + bi + '/' + test.length + ' กระดาน…</p>';
+          if (bi < test.length) setTimeout(step, 0); else res();
+        };
+        step();
+      });
+      testBoards += test.length;
+    }
   } finally { analogOverride = null; oosRunning = false; $("oosGo").disabled = false; }
   const all = [...rows, comb, bank, play], ci = 1.96 * Math.sqrt(0.25 / n), br = bank.hit / n;
   const body = all.map(x => { const r = x.hit / n, d = r - br; return `<tr><td>${esc(x.name)}</td><td>${pc(r)}</td><td class="${d > ci * Math.SQRT2 ? "pos" : d < -ci * Math.SQRT2 ? "neg" : ""}">${(d * 100 >= 0 ? "+" : "") + (d * 100).toFixed(2)}</td></tr>`; }).join("");
@@ -698,7 +711,7 @@ async function runOOS(){
   const verdict = best > ci * Math.SQRT2
     ? "มีวิธีที่แม่นกว่าอ้างอิงเกินช่วงคลาดเคลื่อน แต่ลองหลายวิธีบนชุดเดียว ควรทดสอบซ้ำด้วยกระดานใหม่ที่ยังไม่เคยใช้ก่อนเชื่อ และอย่าลืมว่าแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน (หักคอมมิชชั่น 5%)"
     : "ไม่มีวิธีใดแม่นกว่าการแทงฝั่งเดียวทุกตาอย่างมีนัยสำคัญ แปลว่าการคาดการณ์จากประวัติยังไม่ชนะการเดา (และแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน)";
-  out.innerHTML = `<p class="note">สร้างโมเดลจาก ${n0(train.length)} กระดาน (${n0(train.reduce((a, b) => a + b.results.length, 0))} ตา) ทดสอบกับ ${n0(test.length)} กระดานที่ไม่เคยเห็น รวม ${n0(n)} ตา (ไม่นับ Tie) ทายตั้งแต่ตาที่ ${START + 1} ของแต่ละกระดาน</p>
+  out.innerHTML = `<p class="note">${F === 5 ? "สลับชุด 5 รอบ (แต่ละรอบสร้างโมเดลจากอีก 4 ส่วน) " : ""}สร้างโมเดลจากประมาณ ${n0(trainBoards)} กระดาน (${n0(trainHands)} ตา) ทดสอบกับ ${n0(testBoards)} กระดานที่ไม่เคยเห็นในรอบนั้น รวม ${n0(n)} ตา (ไม่นับ Tie) ทายตั้งแต่ตาที่ ${START + 1} ของแต่ละกระดาน</p>
     <div class="tblwrap"><table><thead><tr><th>วิธี</th><th>ทายถูก</th><th>ต่างจาก Banker ทุกตา (จุด %)</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="verdict">ช่วงคลาดเคลื่อนประมาณ ±${(ci * 100).toFixed(2)}% · ${verdict}</div>`;
 }
