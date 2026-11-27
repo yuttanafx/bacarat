@@ -149,6 +149,7 @@ dialog#cfgDlg h2{margin:0 0 12px}
           <option value="player">Player</option>
           <option value="follow">ตามผลล่าสุด</option>
           <option value="counter">สวนผลล่าสุด</option>
+                  <option value="predict">ตามคาดการณ์ของระบบ (จากการวิเคราะห์ข้อมูล)</option>
         </select></div>
   </div>
   <p class="note" id="cfgErr" style="color:var(--red)" role="alert"></p>
@@ -481,7 +482,7 @@ function makeStrategy(name, unit, cap){
 }
 
 function pickSide(mode, last){
-  if (mode === "banker") return "B";
+  if (mode === "banker" || mode === "predict") return "B"; // predict ใช้ได้เฉพาะกับผลจริง/ตัวจำลองจบกระดาน ส่วนอื่นถอยไป Banker
   if (mode === "player") return "P";
   if (mode === "follow") return last || "B";
   return last === "P" ? "B" : last === "B" ? "P" : "B";
@@ -978,7 +979,7 @@ function predPicks(){
 }
 
 function replayLive(c){
-  const mode = $("liveSide").value, mn = minN(), picks = mode === "predict" ? predPicks() : null;
+  const mode = (c.side === "predict" || $("liveSide").value === "predict") ? "predict" : "setting", mn = minN(), picks = mode === "predict" ? predPicks() : null;
   const st = makeStrategy(c.strategy, c.unit, c.cap);
   let bal = c.balance, last = null, reached = 0; const rows = [];
   for (let i = 0; i < data.length; i++) {
@@ -1448,7 +1449,7 @@ let fillState = null, lastFillSummary = "";
 function startFill(){
   const c = softCfg();
   if (!c) { alert("กรอกยอดเริ่มต้น หน่วย และเพดานเป็นตัวเลขมากกว่า 0"); return; }
-  const target = meta.target || 75, mn = minN(), mode = $("fillSide").value, kind = $("fillSrc").value;
+  const target = meta.target || 75, mn = minN(), mode = ($("fillSide").value === "setting" && c.side === "predict") ? "predict" : $("fillSide").value, kind = $("fillSrc").value;
   const list = selBoards(), hands = list.reduce((a, b) => a + b.results.length, 0);
   if (kind !== "theory" && hands < 30) { alert(`ต้องมีกระดานที่บันทึกไว้รวมอย่างน้อย 30 ตา (ตอนนี้ ${hands}) หรือเลือกใช้ความถี่ทางทฤษฎี`); return; }
   let runs = Math.max(1, Math.min(20000, parseInt($("fillRuns").value, 10) || 500)), note = "";
@@ -1881,7 +1882,9 @@ $("fillOut").addEventListener("click", e => {
 window.addEventListener("resize", drawFillChart);
 $("askAI").onclick = askAI;
 (function(){ const v = store.get("bacc_liveSide"); if (v === "predict" || v === "setting") $("liveSide").value = v; })();
-$("liveSide").onchange = () => { store.set("bacc_liveSide", $("liveSide").value); renderPredict(); renderLive(); };
+const syncSide = () => { const v = $("liveSide").value; if (v === "predict" && $("side").value !== "predict") $("side").value = "predict"; else if (v === "setting" && $("side").value === "predict") $("side").value = "banker"; };
+$("liveSide").onchange = () => { syncSide(); store.set("bacc_liveSide", $("liveSide").value); if (window.cfgRefresh) window.cfgRefresh(); renderPredict(); renderLive(); };
+$("side").addEventListener("change", () => { const v = $("side").value === "predict" ? "predict" : "setting"; $("liveSide").value = v; store.set("bacc_liveSide", v); });
 ["balance", "target", "unit", "cap", "strategy", "side"].forEach(id => { const f = () => { renderLive(); renderPredict(); }; $(id).addEventListener("input", f); $(id).addEventListener("change", f); });
 window.addEventListener("resize", () => { if (rows.length) drawChart(rows.map(x => x.profit)); });
 renderData();
@@ -1936,6 +1939,7 @@ renderData();
   dlg.addEventListener("click", e => { if (e.target === dlg) cancel(); });
   try { const o = JSON.parse(store.get(KEY) || "{}"); IDS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; }); } catch {}
   window.cfgRefresh = () => { save(); summary(); };
+  if ($("liveSide").value === "predict") $("side").value = "predict"; else if ($("side").value === "predict") $("liveSide").value = "predict";
   summary();
   if (typeof renderLive === "function") { renderLive(); renderPredict(); }
 })();
