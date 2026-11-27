@@ -137,14 +137,14 @@ th{color:var(--muted);font-weight:600}
 
   <section class="panel" id="boardsPanel">
     <h2>กระดานและชุดข้อมูล</h2>
-    <p class="note">1 กระดาน = ผลที่ออกต่อเนื่องในโต๊ะหรือสำรับเดียว (เช่น 50 ตา) กรอกผลใน Data Lab ด้านบน ครบแล้วกด "จบกระดาน" ระบบเก็บเข้าฐานข้อมูลและเริ่มกระดานใหม่ให้ แยกกระดานเพื่อไม่ให้รูปแบบข้ามจากกระดานหนึ่งไปอีกกระดาน</p>
+    <p class="note">1 กระดาน = ผลที่ออกต่อเนื่องในโต๊ะหรือสำรับเดียว (1 สำรับ 8 ใบ ออกประมาณ 68–84 ตา ตั้งเป้าได้ตั้งแต่ 1 ถึง 500 ตา) กรอกผลใน Data Lab ด้านบน ครบแล้วกด "จบกระดาน" ระบบเก็บเข้าฐานข้อมูลและเริ่มกระดานใหม่ให้ แยกกระดานเพื่อไม่ให้รูปแบบข้ามจากกระดานหนึ่งไปอีกกระดาน</p>
     <div class="grid">
       <div><label for="boardName">ชื่อกระดาน</label><input id="boardName" placeholder="เช่น โต๊ะ A รอบ 1"></div>
       <div><label for="boardTag">รูปแบบ / แท็ก</label><input id="boardTag" list="tagList" placeholder="เช่น ห้อง 3, ออนไลน์"><datalist id="tagList"></datalist></div>
-      <div><label for="boardTarget">เป้าจำนวนตาต่อกระดาน</label><input id="boardTarget" type="number" min="1" value="50"></div>
+      <div><label for="boardTarget">เป้าจำนวนตาต่อกระดาน</label><input id="boardTarget" type="number" min="1" max="500" value="75" list="targetList"><datalist id="targetList"><option value="50"><option value="75"><option value="84"><option value="100"><option value="150"><option value="200"><option value="300"></datalist></div>
       <div style="align-self:end"><label style="font-weight:400"><input type="checkbox" id="autoEnd"> จบกระดานอัตโนมัติเมื่อครบเป้า</label></div>
     </div>
-    <progress id="boardProg" value="0" max="50" style="margin-top:12px"></progress>
+    <progress id="boardProg" value="0" max="75" style="margin-top:12px"></progress>
     <div id="boardInfo" class="note"></div>
     <div class="row"><button id="endBoard">จบกระดาน (บันทึกเข้าฐานข้อมูล)</button></div>
 
@@ -179,7 +179,7 @@ th{color:var(--muted);font-weight:600}
       <div><label for="dbUrl">URL ฐานข้อมูล</label><input id="dbUrl" type="url" placeholder="http://localhost:8787"></div>
       <div><label for="dbKey">โทเคน (ถ้าตั้งไว้ที่เซิร์ฟเวอร์)</label><input id="dbKey" type="password" autocomplete="off"></div>
       <div><label for="dbTag">ดึงเฉพาะแท็ก</label><select id="dbTag"><option value="">ทั้งหมด</option></select></div>
-      <div><label for="dbN">จำนวนกระดาน</label><select id="dbN"><option value="100">100</option><option value="300" selected>300</option><option value="1000">1,000</option></select></div>
+      <div><label for="dbN">จำนวนกระดาน</label><select id="dbN"><option value="100">100</option><option value="300" selected>300</option><option value="1000">1,000</option><option value="3000">3,000</option><option value="5000">5,000</option></select></div>
       <div><label for="dbMin">จำนวนตาขั้นต่ำต่อกระดาน</label><input id="dbMin" type="number" min="1" value="50"></div>
       <div><label for="dbMode">วิธีเลือก</label><select id="dbMode"><option value="random" selected>สุ่ม</option><option value="latest">ใหม่สุดก่อน</option></select></div>
     </div>
@@ -202,6 +202,18 @@ th{color:var(--muted);font-weight:600}
     </div>
     <div id="hookStatus" class="note"></div>
   </section>
+
+  <section class="panel" id="oosPanel">
+    <h2>ทดสอบนอกตัวอย่าง (วัดว่าวิธีคาดการณ์ชนะการเดาจริงไหม)</h2>
+    <p class="note">แบ่งกระดานที่เลือกเป็น 2 ชุดแบบคงที่ ชุดแรกใช้สร้างโมเดลจับคู่รูปแบบ ชุดที่สองเป็นกระดานที่ไม่เคยเห็นไว้ทดสอบ แล้วเทียบทุกวิธีกับการแทงฝั่งเดียวทุกตา ผลนี้เชื่อถือได้กว่าการย้อนทดสอบบนกระดานเดียว</p>
+    <div class="grid">
+      <div><label for="oosSplit">สัดส่วนกระดานที่ใช้สร้างโมเดล</label><select id="oosSplit"><option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option></select></div>
+      <div><label for="oosMax">จำนวนกระดานทดสอบสูงสุด</label><input id="oosMax" type="number" min="10" max="5000" value="500"></div>
+    </div>
+    <div class="row"><button id="oosGo">เริ่มทดสอบนอกตัวอย่าง</button></div>
+    <div id="oosOut"></div>
+  </section>
+
 
   <section class="panel">
     <div class="grid">
@@ -252,7 +264,7 @@ th{color:var(--muted);font-weight:600}
 
   <section class="panel" id="fillPanel">
     <h2>จำลองจบกระดาน (เติมให้ครบ)</h2>
-    <p class="note">เอากระดานที่กำลังเล่น (ผลจริง) มาต่อให้ครบ <b id="fillLen">50</b> ตา โดยสุ่มตาที่เหลือตามสถิติของกระดานที่บันทึกไว้ แล้วแทงตามกลยุทธ์ที่ตั้งไว้ จำลองซ้ำหลายเกมเพื่อดูยอดเงินและอัตราแพ้ชนะ ความยาวกระดานใช้ค่าจากช่อง "เป้าจำนวนตาต่อกระดาน" และเริ่มแทงตามเกณฑ์ "แสดงคาดการณ์เมื่อมีข้อมูลอย่างน้อย"</p>
+    <p class="note">เอากระดานที่กำลังเล่น (ผลจริง) มาต่อให้ครบ <b id="fillLen">75</b> ตา โดยสุ่มตาที่เหลือตามสถิติของกระดานที่บันทึกไว้ แล้วแทงตามกลยุทธ์ที่ตั้งไว้ จำลองซ้ำหลายเกมเพื่อดูยอดเงินและอัตราแพ้ชนะ ความยาวกระดานใช้ค่าจากช่อง "เป้าจำนวนตาต่อกระดาน" และเริ่มแทงตามเกณฑ์ "แสดงคาดการณ์เมื่อมีข้อมูลอย่างน้อย"</p>
     <div class="grid">
       <div><label for="fillSrc">เติมตาที่เหลือด้วย</label>
         <select id="fillSrc">
@@ -265,7 +277,7 @@ th{color:var(--muted);font-weight:600}
           <option value="predict" selected>ตามคาดการณ์ของระบบ</option>
           <option value="setting">ตามช่อง "ฝั่งที่แทง" ด้านบน</option>
         </select></div>
-      <div><label for="fillRuns">จำนวนเกมที่จำลอง</label><input id="fillRuns" type="number" min="1" max="5000" value="500"></div>
+      <div><label for="fillRuns">จำนวนเกมที่จำลอง</label><input id="fillRuns" type="number" min="1" max="20000" value="500"></div>
     </div>
     <div class="row"><button id="fillGo">จำลองจบกระดาน</button><button class="ghost" id="fillAI">ให้ AI สรุปผล</button></div>
     <progress id="fillProg" value="0" max="1" hidden></progress>
@@ -545,7 +557,7 @@ function renderData(){
 function addResults(arr){
   if (!arr.length) { alert("ไม่พบข้อมูลที่อ่านได้ (ใช้ B, P, T หรือ เจ้ามือ/ผู้เล่น/เสมอ)"); return; }
   data = data.concat(arr); saveData(); renderData();
-  if (meta.auto && data.length >= (meta.target || 50)) finishBoard(true);
+  if (meta.auto && data.length >= (meta.target || 75)) finishBoard(true);
 }
 $("addB").onclick = () => addResults(["B"]);
 $("addP").onclick = () => addResults(["P"]);
@@ -600,6 +612,96 @@ const METHODS = [
       return last === "B" ? ps : 1 - ps;
   } },
 ];
+
+
+/* ---- วิธีจับคู่รูปแบบคล้ายกัน: เทียบผลล่าสุดกับฐานข้อมูลทั้งหมด + กระดานที่กำลังเล่น ----
+   นับว่าหลังรูปแบบ B/P ล่าสุดความยาว 0..12 ตา ตาถัดไปออก B กี่ครั้ง แล้วไล่เกลี่ยจากรูปแบบสั้นไปยาว
+   (ยิ่งรูปแบบยาวและมีตัวอย่างมาก ยิ่งมีน้ำหนัก) ข้อมูลใหม่ที่เพิ่มเข้ามาถูกนับทันทีทุกครั้งที่คำนวณ */
+const AK = 12, AM = 20;
+let analogCache = null, analogOverride = null;
+function buildAnalog(list){
+  const B = [], N = [];
+  for (let L = 0; L <= AK; L++) { B.push(new Int32Array(1 << L)); N.push(new Int32Array(1 << L)); }
+  let hands = 0;
+  for (const b of list) {
+    const r = b.results; let bits = 0, cnt = 0;
+    for (let i = 0; i < r.length; i++) {
+      const ch = r.charCodeAt(i);
+      if (ch !== 66 && ch !== 80) continue;
+      const y = ch === 66 ? 1 : 0, top = Math.min(cnt, AK);
+      for (let L = 0; L <= top; L++) { const k = bits & ((1 << L) - 1); N[L][k]++; B[L][k] += y; }
+      bits = ((bits << 1) | y) & ((1 << AK) - 1); cnt++; hands++;
+    }
+  }
+  return { B, N, hands, boards: list.length };
+}
+function getAnalog(){
+  if (analogOverride) return analogOverride;
+  const list = selBoards(), last = list.length ? list[list.length - 1].id : "", first = list.length ? list[0].id : "";
+  const key = list.length + "|" + (meta.filter || "") + "|" + first + "|" + last;
+  if (!analogCache || analogCache.key !== key) { analogCache = buildAnalog(list); analogCache.key = key; }
+  return analogCache;
+}
+function analogP(s, model){
+  const m = model || getAnalog(), len = s.length, str = s.join(""), lo = Math.max(0, len - 600);
+  let p = 0.5;
+  for (let L = 0; L <= AK && L <= len; L++) {
+    let k = 0; for (let j = len - L; j < len; j++) k = (k << 1) | (s[j] === "B" ? 1 : 0);
+    let n = m.N[L][k], b = m.B[L][k];
+    if (L === 0) { for (let i = lo; i < len; i++) { n++; if (str[i] === "B") b++; } }
+    else { const key = str.slice(len - L); for (let i = lo + L; i < len; i++) if (str.substr(i - L, L) === key) { n++; if (str[i] === "B") b++; } }
+    p = L === 0 ? (b + 1) / (n + 2) : (b + AM * p) / (n + AM);
+  }
+  return p;
+}
+METHODS.push({ name: "จับคู่รูปแบบคล้ายกัน (เทียบฐานข้อมูล)", f: s => analogP(s) });
+
+/* ---- ทดสอบนอกตัวอย่าง: สร้างโมเดลจากกระดานชุดหนึ่ง ทดสอบกับกระดานที่ไม่เคยเห็น ---- */
+const hashId = id => { let h = 2166136261; for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 100; };
+let oosRunning = false;
+async function runOOS(){
+  if (oosRunning) return;
+  const out = $("oosOut"), list = selBoards().filter(b => b.results.length >= 25);
+  if (list.length < 20) { out.innerHTML = '<p class="note">ต้องมีกระดานที่ยาวอย่างน้อย 25 ตาไม่ต่ำกว่า 20 กระดาน (ตอนนี้ ' + list.length + ') ดึงจากฐานข้อมูลก่อนได้</p>'; return; }
+  const pct = parseInt($("oosSplit").value, 10) || 80, maxTest = Math.max(10, parseInt($("oosMax").value, 10) || 500);
+  const train = list.filter(b => hashId(b.id) < pct), testAll = list.filter(b => hashId(b.id) >= pct), test = testAll.slice(0, maxTest);
+  if (train.length < 10 || test.length < 5) { out.innerHTML = '<p class="note">แบ่งชุดแล้วข้อมูลน้อยเกินไป (สร้าง ' + train.length + ' / ทดสอบ ' + test.length + ') เพิ่มกระดานหรือเปลี่ยนสัดส่วน</p>'; return; }
+  oosRunning = true; $("oosGo").disabled = true;
+  const rows = METHODS.map(m => ({ name: m.name, hit: 0 })), comb = { name: "รวมทุกวิธี", hit: 0 }, bank = { name: "แทง Banker ทุกตา (อ้างอิง)", hit: 0 }, play = { name: "แทง Player ทุกตา (อ้างอิง)", hit: 0 };
+  let n = 0, bi = 0;
+  const START = 15;
+  try {
+    analogOverride = buildAnalog(train);
+    await new Promise(res => {
+      const step = () => {
+        const t0 = performance.now();
+        while (bi < test.length && performance.now() - t0 < 30) {
+          const s = nonTie(test[bi].results.split(""));
+          for (let i = START; i < s.length; i++) {
+            const h = s.slice(0, i), ps = METHODS.map(m => m.f(h));
+            ps.forEach((p, j) => { if ((p >= 0.5 ? "B" : "P") === s[i]) rows[j].hit++; });
+            if (((ps.reduce((a, b) => a + b, 0) / ps.length) >= 0.5 ? "B" : "P") === s[i]) comb.hit++;
+            if (s[i] === "B") bank.hit++; else play.hit++;
+            n++;
+          }
+          bi++;
+        }
+        out.innerHTML = '<p class="note">กำลังทดสอบ ' + bi + '/' + test.length + ' กระดาน…</p>';
+        if (bi < test.length) setTimeout(step, 0); else res();
+      };
+      step();
+    });
+  } finally { analogOverride = null; oosRunning = false; $("oosGo").disabled = false; }
+  const all = [...rows, comb, bank, play], ci = 1.96 * Math.sqrt(0.25 / n), br = bank.hit / n;
+  const body = all.map(x => { const r = x.hit / n, d = r - br; return `<tr><td>${esc(x.name)}</td><td>${pc(r)}</td><td class="${d > ci * Math.SQRT2 ? "pos" : d < -ci * Math.SQRT2 ? "neg" : ""}">${(d * 100 >= 0 ? "+" : "") + (d * 100).toFixed(2)}</td></tr>`; }).join("");
+  const best = Math.max(...rows.map(x => x.hit), comb.hit) / n - br;
+  const verdict = best > ci * Math.SQRT2
+    ? "มีวิธีที่แม่นกว่าอ้างอิงเกินช่วงคลาดเคลื่อน แต่ลองหลายวิธีบนชุดเดียว ควรทดสอบซ้ำด้วยกระดานใหม่ที่ยังไม่เคยใช้ก่อนเชื่อ และอย่าลืมว่าแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน (หักคอมมิชชั่น 5%)"
+    : "ไม่มีวิธีใดแม่นกว่าการแทงฝั่งเดียวทุกตาอย่างมีนัยสำคัญ แปลว่าการคาดการณ์จากประวัติยังไม่ชนะการเดา (และแทง Banker ต้องถูกเกิน 51.28% จึงคุ้มทุน)";
+  out.innerHTML = `<p class="note">สร้างโมเดลจาก ${n0(train.length)} กระดาน (${n0(train.reduce((a, b) => a + b.results.length, 0))} ตา) ทดสอบกับ ${n0(test.length)} กระดานที่ไม่เคยเห็น รวม ${n0(n)} ตา (ไม่นับ Tie) ทายตั้งแต่ตาที่ ${START + 1} ของแต่ละกระดาน</p>
+    <div class="tblwrap"><table><thead><tr><th>วิธี</th><th>ทายถูก</th><th>ต่างจาก Banker ทุกตา (จุด %)</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="verdict">ช่วงคลาดเคลื่อนประมาณ ±${(ci * 100).toFixed(2)}% · ${verdict}</div>`;
+}
 
 function predictAll(s){
   const each = METHODS.map(m => ({ name: m.name, p: m.f(s) }));
@@ -872,7 +974,7 @@ function renderLive(){
 let boards = [];
 try { boards = JSON.parse(store.get("bacc_boards") || "[]").filter(b => b && typeof b.results === "string"); } catch { boards = []; }
 const saveBoards = () => store.set("bacc_boards", JSON.stringify(boards));
-let meta = { name: "", tag: "", target: 50, auto: false, hook: "", hookAuto: false, k: 3, filter: "", dbUrl: "", dbKey: "", dbN: "300", dbMin: 50, dbMode: "random", dbTag: "" };
+let meta = { name: "", tag: "", target: 75, auto: false, hook: "", hookAuto: false, k: 3, filter: "", dbUrl: "", dbKey: "", dbN: "300", dbMin: 50, dbMode: "random", dbTag: "" };
 try { Object.assign(meta, JSON.parse(store.get("bacc_meta") || "{}")); } catch {}
 const saveMeta = () => store.set("bacc_meta", JSON.stringify(meta));
 const countsOf = str => { const c = { B: 0, P: 0, T: 0 }; for (const ch of str) if (c[ch] !== undefined) c[ch]++; return c; };
@@ -906,7 +1008,7 @@ async function sendHook(payload){
 
 function finishBoard(auto){
   if (!data.length) { if (!auto) alert("ยังไม่มีข้อมูลในกระดานนี้"); return; }
-  const target = meta.target || 50;
+  const target = meta.target || 75;
   if (!auto && data.length < target && !confirm(`กระดานนี้มี ${data.length} ตา (เป้า ${target}) จบกระดานเลยหรือไม่?`)) return;
   const b = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -923,7 +1025,7 @@ function finishBoard(auto){
 }
 
 function renderBoards(){
-  const target = meta.target || 50, n = data.length;
+  const target = meta.target || 75, n = data.length;
   $("boardProg").max = target; $("boardProg").value = Math.min(n, target);
   $("fillLen").textContent = target;
   $("boardInfo").textContent = `กระดานปัจจุบัน ${n}/${target} ตา` + (n >= target ? " ครบเป้าแล้ว กด \"จบกระดาน\" ได้เลย" : "");
@@ -1093,10 +1195,10 @@ let fillState = null, lastFillSummary = "";
 function startFill(){
   const c = softCfg();
   if (!c) { alert("กรอกยอดเริ่มต้น หน่วย และเพดานเป็นตัวเลขมากกว่า 0"); return; }
-  const target = meta.target || 50, mn = minN(), mode = $("fillSide").value, kind = $("fillSrc").value;
+  const target = meta.target || 75, mn = minN(), mode = $("fillSide").value, kind = $("fillSrc").value;
   const list = selBoards(), hands = list.reduce((a, b) => a + b.results.length, 0);
   if (kind !== "theory" && hands < 30) { alert(`ต้องมีกระดานที่บันทึกไว้รวมอย่างน้อย 30 ตา (ตอนนี้ ${hands}) หรือเลือกใช้ความถี่ทางทฤษฎี`); return; }
-  let runs = Math.max(1, Math.min(5000, parseInt($("fillRuns").value, 10) || 500)), note = "";
+  let runs = Math.max(1, Math.min(20000, parseInt($("fillRuns").value, 10) || 500)), note = "";
   if (data.length >= target) { runs = 1; note = "กระดานปัจจุบันครบความยาวแล้ว จึงคำนวณจากผลจริงเกมเดียว"; }
   else if (mode === "predict") {
     const cap = Math.max(20, Math.floor(6e7 / (4 * target * target)));
@@ -1370,8 +1472,9 @@ $("boardName").value = meta.name; $("boardTag").value = meta.tag; $("boardTarget
 $("kSel").value = String(meta.k); $("hookUrl").value = meta.hook; $("hookAuto").checked = !!meta.hookAuto;
 $("boardName").oninput = () => { meta.name = $("boardName").value; saveMeta(); };
 $("boardTag").oninput = () => { meta.tag = $("boardTag").value; saveMeta(); };
-$("boardTarget").oninput = () => { meta.target = Math.max(1, parseInt($("boardTarget").value, 10) || 50); saveMeta(); renderBoards(); };
+$("boardTarget").oninput = () => { meta.target = Math.max(1, Math.min(500, parseInt($("boardTarget").value, 10) || 75)); saveMeta(); renderBoards(); };
 $("autoEnd").onchange = () => { meta.auto = $("autoEnd").checked; saveMeta(); };
+$("oosGo").onclick = runOOS;
 $("kSel").onchange = () => { meta.k = parseInt($("kSel").value, 10) || 3; saveMeta(); renderPattern(); };
 $("tagFilter").onchange = () => { meta.filter = $("tagFilter").value; saveMeta(); renderBoards(); };
 $("hookUrl").oninput = () => { meta.hook = $("hookUrl").value; saveMeta(); };
@@ -1438,7 +1541,7 @@ $("boardFile").onchange = async e => {
   const s = j && j.settings;
   if (replace && s) {
     if (s.sim) for (const id of SIM_IDS) if (s.sim[id] !== undefined && $(id)) $(id).value = s.sim[id];
-    if (s.boardTarget) { meta.target = Math.max(1, parseInt(s.boardTarget, 10) || 50); $("boardTarget").value = meta.target; }
+    if (s.boardTarget) { meta.target = Math.max(1, Math.min(500, parseInt(s.boardTarget, 10) || 75)); $("boardTarget").value = meta.target; }
     if (s.autoEnd !== undefined) { meta.auto = !!s.autoEnd; $("autoEnd").checked = meta.auto; }
     if (s.patternK) { meta.k = parseInt(s.patternK, 10) || 3; $("kSel").value = String(meta.k); }
     if (["10", "20", "30"].includes(String(s.minN))) { $("minN").value = String(s.minN); store.set("bacc_minN", String(s.minN)); }
