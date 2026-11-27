@@ -129,6 +129,7 @@ body.dt .bacOnly{display:none}
 dialog#loginDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:20px;width:min(380px,92vw)}
 dialog#loginDlg::backdrop{background:rgba(0,0,0,.6)}
 dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+.slotRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 8px}.slotRow .gameSw{margin:0}
 .authBar{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:.85rem}
 .authBar button{padding:5px 12px}
 </style>
@@ -305,6 +306,7 @@ dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;ma
 
     <details class="fold bacOnly"><summary>ฐานข้อมูลกลาง (ดึงกระดานมาใช้)</summary>
     <p class="note">ดึงกระดานจากเซิร์ฟเวอร์ฐานข้อมูล (ชุด Kaggle ราว 111,000 กระดาน) มารวมกับกระดานในเครื่อง ดึงได้ครั้งละไม่เกิน 1,000 กระดาน เพราะเบราว์เซอร์เก็บข้อมูลได้จำกัด กระดานที่ดึงมาจะติดแท็กของชุดข้อมูล ใช้ "ดูเฉพาะรูปแบบ" แยกออกจากกระดานที่เล่นเองได้ มี 2 วิธี: ดึงจากไฟล์ข้อมูลที่อยู่ในเว็บเอง (ใช้บน GitHub Pages ได้ ไม่ต้องมีเซิร์ฟเวอร์) หรือดึงจากเซิร์ฟเวอร์ฐานข้อมูล (ต้องเปิด server.py ก่อน ดูใน db/README.md)</p>
+    <div class="slotRow"><span class="note">เลือกฐานข้อมูลที่จะดึง:</span> <div class="gameSw slotSw" role="group" aria-label="เลือกชุด Webhook/ฐานข้อมูล"><button type="button" data-slot="1">ชุด 1</button><button type="button" data-slot="2">ชุด 2</button></div><span class="note slotHint"></span></div>
     <div class="grid">
       <div><label for="dbUrl">URL ฐานข้อมูล</label><input id="dbUrl" type="url" placeholder="http://localhost:8787"></div>
       <div><label for="dbKey">โทเคน (ถ้าตั้งไว้ที่เซิร์ฟเวอร์)</label><input id="dbKey" type="password" autocomplete="off"></div>
@@ -324,6 +326,7 @@ dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;ma
 
     <details class="fold"><summary>Webhook (ส่งข้อมูลออกไปให้ระบบอื่น)</summary>
     <p class="note">เมื่อจบกระดาน ระบบ POST ข้อมูลเป็น JSON ไปยัง URL ที่ตั้งไว้ เช่น n8n, Make, Zapier หรือเซิร์ฟเวอร์ของคุณ เพื่อให้ฝั่งนั้นเก็บลงฐานข้อมูลและเรียก AI API ตรวจต่อได้ หน้าเว็บไฟล์เดียวนี้เปิดให้ระบบอื่นเข้ามาดึงข้อมูลเองไม่ได้ จึงใช้วิธีส่งออกแทน</p>
+    <div class="slotRow"><span class="note">เลือกชุด Webhook:</span> <div class="gameSw slotSw" role="group" aria-label="เลือกชุด Webhook/ฐานข้อมูล"><button type="button" data-slot="1">ชุด 1</button><button type="button" data-slot="2">ชุด 2</button></div><span class="note slotHint"></span></div>
     <label for="hookUrl">Webhook URL</label>
     <input id="hookUrl" type="url" placeholder="https://…">
     <label style="margin-top:8px;font-weight:400"><input type="checkbox" id="hookAuto"> ส่งอัตโนมัติทุกครั้งที่จบกระดาน</label>
@@ -2010,6 +2013,31 @@ if (GAME === "dt") {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
   document.querySelectorAll("[placeholder]").forEach(el => { el.placeholder = gameText(el.placeholder); });
 }
+/* ---------- สลับชุด 1 / 2 ของ Webhook และฐานข้อมูล (แต่ละชุดจำ URL / โทเคน / ส่งอัตโนมัติ แยกกัน) ---------- */
+(() => {
+  const FIELDS = () => ({ hook: meta.hook || "", hookAuto: !!meta.hookAuto, dbUrl: $("dbUrl").value, dbKey: $("dbKey").value });
+  meta.slot = meta.slot === 2 ? 2 : 1;
+  meta.slots = meta.slots || {};
+  const paint = () => {
+    document.querySelectorAll(".slotSw button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.slot === meta.slot)));
+    document.querySelectorAll(".slotHint").forEach(h => { h.textContent = "ใช้อยู่: ชุด " + meta.slot; });
+  };
+  const apply = v => {
+    meta.hook = v.hook || ""; meta.hookAuto = !!v.hookAuto; meta.dbUrl = v.dbUrl || ""; meta.dbKey = v.dbKey || "";
+    $("hookUrl").value = meta.hook; $("hookAuto").checked = meta.hookAuto; $("dbUrl").value = meta.dbUrl; $("dbKey").value = meta.dbKey;
+    $("hookStatus").textContent = ""; $("dbStatus").textContent = "";
+  };
+  const setSlot = n => {
+    if (n === meta.slot) return;
+    meta.slots[meta.slot] = FIELDS();                      // เก็บค่าของชุดเดิมไว้
+    meta.slot = n;
+    apply(meta.slots[n] || { hook: "", hookAuto: false, dbUrl: "", dbKey: "" }); // ชุดใหม่เริ่มว่าง ถ้ายังไม่เคยตั้ง
+    saveMeta(); paint();
+  };
+  document.querySelectorAll(".slotSw button").forEach(b => { b.onclick = () => setSlot(+b.dataset.slot); });
+  paint();
+})();
+
 /* ---------- ล็อกอินสมาชิก: ต้องล็อกอินก่อนกรอก/แก้ข้อมูลใน Data Lab ---------- */
 (() => {
   const KEY = "bacc_session", GATED = "#addB,#addP,#addT,#undo,#appendData,#replaceData,#importFile,#clearData";
