@@ -115,6 +115,11 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::before{content:"▸";display:inline-block;transition:transform .15s;color:var(--muted)}
 details.fold[open]>summary::before{transform:rotate(90deg)}
 details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+.cfgSum{margin:0 0 6px}.chip{display:inline-block;background:var(--panel2);border-radius:999px;padding:3px 11px;margin:2px 4px 2px 0;font-size:.85rem}
+dialog#cfgDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:18px;width:min(480px,92vw)}
+dialog#cfgDlg::backdrop{background:rgba(0,0,0,.5)}
+dialog#cfgDlg h2{margin:0 0 12px}
 </style>
 </head>
 <body>
@@ -122,6 +127,36 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
   <button id="menuBtn" aria-label="เปิดเมนู" aria-expanded="false" aria-controls="drawer">☰</button>
   <div><b>Baccarat Simulator</b> <span id="pageTitle"></span></div>
 </header>
+<dialog id="cfgDlg" aria-labelledby="cfgTitle">
+  <h2 id="cfgTitle">ตั้งค่ากลยุทธ์และยอดเงิน</h2>
+  <div class="grid">
+      <div><label for="balance">ยอดเริ่มต้น</label><input id="balance" type="number" value="1000" min="1"></div>
+      <div><label for="unit">เงินเดิมพันต่อหน่วย</label><input id="unit" type="number" value="1" min="0.01" step="any"></div>
+      <div><label for="cap">เพดานเดิมพันต่อตา</label><input id="cap" type="number" value="100" min="1"></div>
+      <div><label for="strategy">กลยุทธ์</label>
+        <select id="strategy">
+          <option value="flat">Flat (เท่าเดิม)</option>
+          <option value="martingale" selected>Martingale (ทบเมื่อแพ้)</option>
+          <option value="paroli">Paroli (ทบเมื่อชนะ)</option>
+          <option value="dalembert">D’Alembert</option>
+          <option value="fibonacci">Fibonacci</option>
+          <option value="oscar">Oscar’s Grind</option>
+          <option value="1326">1-3-2-6</option>
+        </select></div>
+      <div><label for="side">ฝั่งที่แทง</label>
+        <select id="side">
+          <option value="banker" selected>Banker</option>
+          <option value="player">Player</option>
+          <option value="follow">ตามผลล่าสุด</option>
+          <option value="counter">สวนผลล่าสุด</option>
+        </select></div>
+  </div>
+  <p class="note" id="cfgErr" style="color:var(--red)" role="alert"></p>
+  <div class="btns" style="margin:12px 0 0">
+    <button id="cfgOk" style="background:var(--green)">ตกลง</button>
+    <button id="cfgCancel" class="ghost">ยกเลิก</button>
+  </div>
+</dialog>
 <div id="scrim"></div>
 <nav id="drawer" aria-label="เมนูหน้า" aria-hidden="true">
   <h2>เลือกหน้า</h2>
@@ -168,6 +203,25 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
     </div>
     <div id="predict"></div>
     <div id="analysis"></div>
+  </section>
+
+  <section class="panel" id="cfgCard">
+    <h2>ตั้งค่ากลยุทธ์และยอดเงิน</h2>
+    <div class="cfgSum" aria-live="polite"></div>
+    <div class="row"><button class="ghost cfgBtn">แก้ไขการตั้งค่า</button></div>
+  </section>
+
+  <section class="panel" id="livePanel">
+    <h2>ยอดเงินและเดิมพันแบบสด</h2>
+    <p class="note">คำนวณเงินเดิมพันแต่ละไม้ตามกลยุทธ์และยอดเริ่มต้นที่ตั้งไว้ เดินตามผลจริงที่กรอกใน Data Lab และอัปเดตทันทีเมื่อกดตกลงในหน้าตั้งค่า</p>
+    <div style="max-width:300px;margin-bottom:10px">
+      <label for="liveSide">ฝั่งที่แทงในตารางนี้</label>
+      <select id="liveSide">
+        <option value="predict" selected>ตามคาดการณ์ของระบบ</option>
+        <option value="setting">ตามค่า "ฝั่งที่แทง" ในหน้าตั้งค่า</option>
+      </select>
+    </div>
+    <div id="live"></div>
   </section>
 </div>
 
@@ -262,30 +316,14 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
 
   <div class="page" id="page-sim" data-title="ตัวจำลองและยอดเงิน">
   <section class="panel">
+    <div class="cfgSum" aria-live="polite"></div>
+    <div class="row"><button class="ghost cfgBtn">แก้ไขกลยุทธ์และยอดเงิน</button></div>
+  </section>
+  <section class="panel">
     <div class="grid">
-      <div><label for="balance">ยอดเริ่มต้น</label><input id="balance" type="number" value="1000" min="1"></div>
       <div><label for="target">ยอดเป้าหมาย</label><input id="target" type="number" value="1100"></div>
-      <div><label for="unit">เงินเดิมพันต่อหน่วย</label><input id="unit" type="number" value="1" min="0.01" step="any"></div>
-      <div><label for="cap">เพดานเดิมพันต่อตา</label><input id="cap" type="number" value="100" min="1"></div>
       <div><label for="maxHands">จำนวนตาต่อเซสชัน</label><input id="maxHands" type="number" value="1000" min="1"></div>
       <div><label for="sessions">จำนวนเซสชัน</label><input id="sessions" type="number" value="2000" min="1"></div>
-      <div><label for="strategy">กลยุทธ์</label>
-        <select id="strategy">
-          <option value="flat">Flat (เท่าเดิม)</option>
-          <option value="martingale" selected>Martingale (ทบเมื่อแพ้)</option>
-          <option value="paroli">Paroli (ทบเมื่อชนะ)</option>
-          <option value="dalembert">D’Alembert</option>
-          <option value="fibonacci">Fibonacci</option>
-          <option value="oscar">Oscar’s Grind</option>
-          <option value="1326">1-3-2-6</option>
-        </select></div>
-      <div><label for="side">ฝั่งที่แทง</label>
-        <select id="side">
-          <option value="banker" selected>Banker</option>
-          <option value="player">Player</option>
-          <option value="follow">ตามผลล่าสุด</option>
-          <option value="counter">สวนผลล่าสุด</option>
-        </select></div>
       <div style="grid-column:1/-1"><label for="source">แหล่งผลลัพธ์</label>
         <select id="source">
           <option value="shoe" selected>จำลองไพ่ 8 สำรับตามกติกา</option>
@@ -295,18 +333,6 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
     </div>
   </section>
 
-  <section class="panel" id="livePanel">
-    <h2>ยอดเงินและเดิมพันแบบสด</h2>
-    <p class="note">เปลี่ยนค่าด้านบนแล้วตารางนี้อัปเดตทันที และเดินตามผลจริงที่กรอกใน Data Lab ด้วยกลยุทธ์และฝั่งที่เลือก</p>
-    <div style="max-width:300px;margin-bottom:10px">
-      <label for="liveSide">ฝั่งที่แทงในตารางนี้</label>
-      <select id="liveSide">
-        <option value="predict" selected>ตามคาดการณ์ของระบบ</option>
-        <option value="setting">ตามช่อง "ฝั่งที่แทง" ด้านบน</option>
-      </select>
-    </div>
-    <div id="live"></div>
-  </section>
 
   <section class="panel" id="fillPanel">
     <h2>จำลองจบกระดาน (เติมให้ครบ)</h2>
@@ -354,10 +380,11 @@ details.fold>summary:focus-visible{outline:2px solid var(--blue);outline-offset:
   <!-- ===== AI ===== -->
   <section class="panel">
     <h2>ให้ AI ช่วยวิเคราะห์</h2>
-    <p class="note">ส่งสถิติสรุปของข้อมูลจริง ค่าตั้งต้น และผลจำลองล่าสุดไปยัง Anthropic API (ต้องใช้ API key ของคุณเอง การเรียกจะออกจากเบราว์เซอร์ของคุณโดยตรง)</p>
+    <p class="note">ส่งสถิติสรุปของข้อมูลจริง ค่าตั้งต้น และผลจำลองล่าสุดไปยัง API ของผู้ให้บริการที่เลือก (Claude, GPT หรือ Gemini) ต้องใช้ API key ของคุณเอง การเรียกจะออกจากเบราว์เซอร์ของคุณโดยตรง ไม่ผ่านเซิร์ฟเวอร์ใด ๆ ของเว็บนี้</p>
     <div class="grid">
-      <div><label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
-      <div><label for="model">โมเดล</label><input id="model" value="claude-sonnet-5-5"></div>
+      <div><label for="provider">ผู้ให้บริการ AI</label><select id="provider"><option value="claude">Anthropic (Claude)</option><option value="openai">OpenAI (GPT)</option><option value="gemini">Google (Gemini)</option></select></div>
+      <div><label for="model">โมเดล (พิมพ์ชื่อโมเดลอื่นได้)</label><input id="model" value="claude-sonnet-5-5" list="modelList" autocomplete="off"><datalist id="modelList"></datalist></div>
+      <div style="grid-column:1/-1"><label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
     </div>
     <label style="margin-top:8px;font-weight:400"><input type="checkbox" id="rememberKey"> จำ key ไว้ในเบราว์เซอร์นี้ (ไม่แนะนำบนเครื่องที่ใช้ร่วมกัน)</label>
     <label for="aiQ" style="margin-top:8px">คำถามเพิ่มเติม (ไม่บังคับ)</label>
@@ -887,11 +914,9 @@ function renderPredict(){
 let lastPredict = null;
 
 async function aiPredict(){
-  const key = $("apiKey").value.trim(), model = $("model").value.trim(), n = data.length;
+  const key = $("apiKey").value.trim(), n = data.length;
   if (!lastPredict) return;
   if (!key) { aiPred = { n, err: "กรอก API key ในส่วน \"ให้ AI ช่วยวิเคราะห์\" ด้านล่างก่อน" }; renderPredict(); return; }
-  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
-  store.set("bacc_model", model);
   const { s, r, btText } = lastPredict;
   const prompt = `ลำดับผลจริง (ไม่นับ Tie, เก่า→ใหม่, ${s.length} ตา, แสดง 120 ตาล่าสุด): ${s.slice(-120).join("")}\n` +
     `จำนวนทั้งหมด B=${s.filter(x => x === "B").length} P=${s.filter(x => x === "P").length}\n` +
@@ -900,23 +925,7 @@ async function aiPredict(){
     `เลือกฝั่งที่คาดว่าจะออกในตาถัดไประหว่าง B กับ P และบอกความมั่นใจตามความเป็นจริง`;
   const btn = $("aiPredict"); btn.disabled = true; btn.textContent = "กำลังวิเคราะห์…";
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify({
-        model, max_tokens: 600,
-        system: "คุณเป็นนักสถิติ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่นและไม่มี markdown รูปแบบ {\"pick\":\"B\"หรือ\"P\",\"prob_pick\":ตัวเลข 0-1,\"reason\":\"เหตุผลสั้น ๆ ภาษาไทย\"} บาคาร่าแต่ละตาเป็นอิสระต่อกัน ดังนั้น prob_pick ต้องสอดคล้องกับความจริงและใกล้ 0.5 เว้นแต่ข้อมูลและผลย้อนทดสอบสนับสนุนจริง ๆ ใน reason ให้บอกตรง ๆ ว่าเป็นการประมาณจากข้อมูลตัวอย่างเล็ก และไม่ได้ทำให้การเดิมพันมีค่าคาดหวังเป็นบวก",
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
-    const txt = (j.content || []).map(b => b.type === "text" ? b.text : "").join("").replace(/```json|```/g, "").trim();
+    const txt = (await aiCall("คุณเป็นนักสถิติ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่นและไม่มี markdown รูปแบบ {\"pick\":\"B\"หรือ\"P\",\"prob_pick\":ตัวเลข 0-1,\"reason\":\"เหตุผลสั้น ๆ ภาษาไทย\"} บาคาร่าแต่ละตาเป็นอิสระต่อกัน ดังนั้น prob_pick ต้องสอดคล้องกับความจริงและใกล้ 0.5 เว้นแต่ข้อมูลและผลย้อนทดสอบสนับสนุนจริง ๆ ใน reason ให้บอกตรง ๆ ว่าเป็นการประมาณจากข้อมูลตัวอย่างเล็ก และไม่ได้ทำให้การเดิมพันมีค่าคาดหวังเป็นบวก", prompt, 600)).replace(/```json|```/g, "").trim();
     const o = JSON.parse(txt);
     if (o.pick !== "B" && o.pick !== "P") throw new Error("รูปแบบคำตอบไม่ถูกต้อง");
     const prob = Math.min(1, Math.max(0, Number(o.prob_pick) || 0.5));
@@ -1176,20 +1185,46 @@ function renderPattern(){
     <p class="note">ข้อมูลรวม ${ps.totN} ตา ค่าเฉลี่ย B ในตาถัดไป ${pc(ps.p0)} · รูปแบบที่ทดสอบได้ (n ≥ 10) ${ps.testable} แบบ มี ${nominal} แบบที่ p &lt; 0.05 ทั้งที่โดยบังเอิญคาดว่าจะมีประมาณ ${(ps.testable * 0.05).toFixed(1)} แบบ จึงใช้เกณฑ์เข้มขึ้น (Bonferroni) ในการติดป้าย "เด่น"</p>`;
 }
 
-async function callClaude(system, prompt, maxTokens){
-  const key = $("apiKey").value.trim(), model = $("model").value.trim();
-  if (!key) throw new Error('กรอก API key ในส่วน "ให้ AI ช่วยวิเคราะห์" ด้านล่างของหน้าก่อน');
-  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
-  store.set("bacc_model", model);
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] })
-  });
-  const j = await res.json();
-  if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
-  return (j.content || []).map(b => b.type === "text" ? b.text : "").join("\n").trim();
+/* ---------- เรียก AI หลายผู้ให้บริการ (Claude / GPT / Gemini) ---------- */
+const PROV = {
+  claude: { keyName: "bacc_key", modelName: "bacc_model", model: "claude-sonnet-5-5", ph: "sk-ant-…", models: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"] },
+  openai: { keyName: "bacc_key_openai", modelName: "bacc_model_openai", model: "gpt-5-mini", ph: "sk-…", models: ["gpt-5-mini", "gpt-5", "gpt-4o-mini", "gpt-4o"] },
+  gemini: { keyName: "bacc_key_gemini", modelName: "bacc_model_gemini", model: "gemini-2.5-flash", ph: "AIza…", models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"] }
+};
+const curProv = () => PROV[$("provider").value] ? $("provider").value : "claude";
+function loadProvider(p){
+  const c = PROV[p];
+  $("apiKey").value = store.get(c.keyName) || ""; $("rememberKey").checked = !!store.get(c.keyName);
+  $("model").value = store.get(c.modelName) || c.model; $("apiKey").placeholder = c.ph;
+  $("modelList").innerHTML = c.models.map(m => `<option value="${m}"></option>`).join("");
 }
+async function aiCall(system, prompt, maxTokens){
+  const p = curProv(), c = PROV[p], key = $("apiKey").value.trim(), model = $("model").value.trim() || c.model;
+  if (!key) throw new Error('กรอก API key ในส่วน "ให้ AI ช่วยวิเคราะห์" ด้านล่างของหน้าก่อน');
+  if ($("rememberKey").checked) store.set(c.keyName, key); else store.del(c.keyName);
+  store.set(c.modelName, model);
+  let url, headers = { "Content-Type": "application/json" }, body;
+  if (p === "openai") {
+    url = "https://api.openai.com/v1/chat/completions"; headers.Authorization = "Bearer " + key;
+    body = { model, max_completion_tokens: Math.max(maxTokens * 4, 2000), messages: [{ role: "system", content: system }, { role: "user", content: prompt }] };
+  } else if (p === "gemini") {
+    url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent"; headers["x-goog-api-key"] = key;
+    body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: Math.max(maxTokens * 4, 2048) } };
+  } else {
+    url = "https://api.anthropic.com/v1/messages"; headers["x-api-key"] = key; headers["anthropic-version"] = "2023-06-01"; headers["anthropic-dangerous-direct-browser-access"] = "true";
+    body = { model, max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] };
+  }
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  let j = {}; try { j = await res.json(); } catch {}
+  if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
+  let txt;
+  if (p === "openai") txt = j.choices && j.choices[0] && j.choices[0].message ? j.choices[0].message.content : "";
+  else if (p === "gemini") txt = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(x => x.text || "").join("");
+  else txt = (j.content || []).map(b => b.type === "text" ? b.text : "").join("\n");
+  return String(txt || "").trim();
+}
+
+async function callClaude(system, prompt, maxTokens){ return aiCall(system, prompt, maxTokens); }
 
 async function aiPattern(){
   const out = $("aiPatOut");
@@ -1488,38 +1523,20 @@ function saveCsv(){
 
 /* ---------- AI analysis ---------- */
 (function initKey(){
-  const k = store.get("bacc_key");
-  if (k) { $("apiKey").value = k; $("rememberKey").checked = true; }
-  const m = store.get("bacc_model"); if (m) $("model").value = m;
+  const p = store.get("bacc_provider"); if (PROV[p]) $("provider").value = p;
+  loadProvider(curProv());
+  $("provider").onchange = () => { store.set("bacc_provider", $("provider").value); loadProvider(curProv()); };
 })();
 
 async function askAI(){
-  const key = $("apiKey").value.trim(), model = $("model").value.trim();
+  const key = $("apiKey").value.trim();
   const out = $("aiOut");
   if (!key) { out.textContent = "กรอก API key ก่อน"; return; }
   if (!lastSummary && !lastSimText) { out.textContent = "ยังไม่มีข้อมูลให้วิเคราะห์ เพิ่มข้อมูลจริงหรือกด Start ก่อน"; return; }
-  if ($("rememberKey").checked) store.set("bacc_key", key); else store.del("bacc_key");
-  store.set("bacc_model", model);
   const prompt = `ข้อมูลจริงที่ผู้ใช้เก็บ:\n${lastSummary || "(ยังไม่มี)"}\n\nผลจำลองล่าสุด:\n${lastSimText || "(ยังไม่ได้รัน)"}\n\nคำถามของผู้ใช้: ${$("aiQ").value.trim() || "ช่วยสรุปและวิเคราะห์ภาพรวม ความเสี่ยง และข้อเสนอแนะ"}`;
   const btn = $("askAI"); btn.disabled = true; out.textContent = "กำลังวิเคราะห์…";
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify({
-        model, max_tokens: 1500,
-        system: "คุณเป็นนักวิเคราะห์สถิติ ตอบเป็นภาษาไทย กระชับ ตรงไปตรงมา อธิบายตัวเลขที่ได้รับ ชี้ความเสี่ยง (เช่น ความเสี่ยงล้มละลายของกลยุทธ์ทบเงิน) และบอกข้อจำกัดของข้อมูลตัวอย่างน้อย บาคาร่ามีความได้เปรียบของเจ้ามือ และผลแต่ละตาเป็นอิสระต่อกัน ห้ามอ้างว่าทำนายตาถัดไปได้ ห้ามสนับสนุน gambler's fallacy ถ้าผู้ใช้ถามหาวิธีชนะ ให้อธิบายตามจริงว่าค่าคาดหวังติดลบ และแนะนำการกำหนดงบและเพดานขาดทุน",
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error && j.error.message ? j.error.message : "HTTP " + res.status);
-    out.textContent = (j.content || []).map(b => b.type === "text" ? b.text : "").join("\n") || "(ไม่มีข้อความตอบกลับ)";
+    out.textContent = (await aiCall("คุณเป็นนักวิเคราะห์สถิติ ตอบเป็นภาษาไทย กระชับ ตรงไปตรงมา อธิบายตัวเลขที่ได้รับ ชี้ความเสี่ยง (เช่น ความเสี่ยงล้มละลายของกลยุทธ์ทบเงิน) และบอกข้อจำกัดของข้อมูลตัวอย่างน้อย บาคาร่ามีความได้เปรียบของเจ้ามือ และผลแต่ละตาเป็นอิสระต่อกัน ห้ามอ้างว่าทำนายตาถัดไปได้ ห้ามสนับสนุน gambler's fallacy ถ้าผู้ใช้ถามหาวิธีชนะ ให้อธิบายตามจริงว่าค่าคาดหวังติดลบ และแนะนำการกำหนดงบและเพดานขาดทุน", prompt, 1500)) || "(ไม่มีข้อความตอบกลับ)";
   } catch (e) {
     out.textContent = "เรียก API ไม่สำเร็จ: " + e.message + "\nตรวจสอบ API key ชื่อโมเดล และการเชื่อมต่ออินเทอร์เน็ต";
   } finally { btn.disabled = false; }
@@ -1601,7 +1618,7 @@ $("boardFile").onchange = async e => {
   } else if (cur) curMsg = ", ข้ามกระดานปัจจุบันในไฟล์ (เพราะเครื่องนี้มีกระดานที่กำลังเล่นอยู่)";
   const s = j && j.settings;
   if (replace && s) {
-    if (s.sim) for (const id of SIM_IDS) if (s.sim[id] !== undefined && $(id)) $(id).value = s.sim[id];
+    if (s.sim) { for (const id of SIM_IDS) if (s.sim[id] !== undefined && $(id)) $(id).value = s.sim[id]; if (window.cfgRefresh) window.cfgRefresh(); }
     if (s.boardTarget) { meta.target = Math.max(1, Math.min(500, parseInt(s.boardTarget, 10) || 75)); $("boardTarget").value = meta.target; }
     if (s.autoEnd !== undefined) { meta.auto = !!s.autoEnd; $("autoEnd").checked = meta.auto; }
     if (s.patternK) { meta.k = parseInt(s.patternK, 10) || 3; $("kSel").value = String(meta.k); }
@@ -1736,6 +1753,34 @@ renderData();
   drawer.querySelectorAll("button").forEach(b => b.onclick = () => { show(b.dataset.page, true); setMenu(false); });
   window.addEventListener("hashchange", () => show(location.hash.slice(1), false));
   show(location.hash.slice(1), false);
+})();
+
+/* ---- ตั้งค่ากลยุทธ์และยอดเงิน (ป๊อปอัพ ตกลง = บันทึกแล้วปิด) ---- */
+(function(){
+  const IDS = ["balance", "unit", "cap", "strategy", "side"], dlg = $("cfgDlg"), KEY = "bacc_cfg";
+  const txt = id => { const el = $(id); return el.tagName === "SELECT" ? el.options[el.selectedIndex].text : el.value; };
+  const save = () => { const o = {}; IDS.forEach(id => { o[id] = $(id).value; }); store.set(KEY, JSON.stringify(o)); };
+  function summary(){
+    const c = ["ยอดเริ่มต้น " + money(parseFloat($("balance").value) || 0), "หน่วย " + $("unit").value, "เพดาน " + $("cap").value, txt("strategy"), "แทง " + txt("side")];
+    document.querySelectorAll(".cfgSum").forEach(el => { el.innerHTML = c.map(x => `<span class="chip">${esc(x)}</span>`).join(""); });
+  }
+  const fire = () => IDS.forEach(id => { $(id).dispatchEvent(new Event("input", { bubbles: true })); $(id).dispatchEvent(new Event("change", { bubbles: true })); });
+  let snap = null;
+  const open = () => { snap = {}; IDS.forEach(id => { snap[id] = $(id).value; }); $("cfgErr").textContent = ""; dlg.showModal(); };
+  const cancel = () => { if (snap) { IDS.forEach(id => { $(id).value = snap[id]; }); fire(); } snap = null; summary(); if (dlg.open) dlg.close(); };
+  document.querySelectorAll(".cfgBtn").forEach(b => b.onclick = open);
+  $("cfgOk").onclick = () => {
+    const bad = ["balance", "unit", "cap"].find(id => !(parseFloat($(id).value) > 0));
+    if (bad) { $("cfgErr").textContent = "กรอกยอดเริ่มต้น หน่วย และเพดานเป็นตัวเลขมากกว่า 0"; $(bad).focus(); return; }
+    save(); summary(); fire(); snap = null; dlg.close();
+  };
+  $("cfgCancel").onclick = cancel;
+  dlg.addEventListener("cancel", e => { e.preventDefault(); cancel(); });
+  dlg.addEventListener("click", e => { if (e.target === dlg) cancel(); });
+  try { const o = JSON.parse(store.get(KEY) || "{}"); IDS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; }); } catch {}
+  window.cfgRefresh = () => { save(); summary(); };
+  summary();
+  if (typeof renderLive === "function") { renderLive(); renderPredict(); }
 })();
 </script>
 </body>
