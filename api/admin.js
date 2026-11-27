@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
       else if (q.status === 'disabled') list = list.filter((u) => !u.active);
       else if (q.status === 'expired') list = list.filter(expired);
       list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-      return res.status(200).json({ ok: true, persistent: A.persistent, total: list.length, users: list });
+      return res.status(200).json({ ok: true, persistent: A.persistent, redisVia: A.redisVia, total: list.length, users: list });
     }
     if (req.method === 'POST') {
       const b = A.body(req);
