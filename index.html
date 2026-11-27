@@ -173,6 +173,23 @@ th{color:var(--muted);font-weight:600}
     <div class="row"><button id="aiPattern">ให้ AI ตรวจรูปแบบ</button></div>
     <div id="aiPatOut" aria-live="polite"></div>
 
+    <h3>ฐานข้อมูลกลาง (ดึงกระดานมาใช้)</h3>
+    <p class="note">ดึงกระดานจากเซิร์ฟเวอร์ฐานข้อมูล (ชุด Kaggle ราว 111,000 กระดาน) มารวมกับกระดานในเครื่อง ดึงได้ครั้งละไม่เกิน 1,000 กระดาน เพราะเบราว์เซอร์เก็บข้อมูลได้จำกัด กระดานที่ดึงมาจะติดแท็กของชุดข้อมูล ใช้ "ดูเฉพาะรูปแบบ" แยกออกจากกระดานที่เล่นเองได้ ต้องเปิดเซิร์ฟเวอร์ไว้ก่อน (ดูวิธีใน db/README.md)</p>
+    <div class="grid">
+      <div><label for="dbUrl">URL ฐานข้อมูล</label><input id="dbUrl" type="url" placeholder="http://localhost:8787"></div>
+      <div><label for="dbKey">โทเคน (ถ้าตั้งไว้ที่เซิร์ฟเวอร์)</label><input id="dbKey" type="password" autocomplete="off"></div>
+      <div><label for="dbTag">ดึงเฉพาะแท็ก</label><select id="dbTag"><option value="">ทั้งหมด</option></select></div>
+      <div><label for="dbN">จำนวนกระดาน</label><select id="dbN"><option value="100">100</option><option value="300" selected>300</option><option value="1000">1,000</option></select></div>
+      <div><label for="dbMin">จำนวนตาขั้นต่ำต่อกระดาน</label><input id="dbMin" type="number" min="1" value="50"></div>
+      <div><label for="dbMode">วิธีเลือก</label><select id="dbMode"><option value="random" selected>สุ่ม</option><option value="latest">ใหม่สุดก่อน</option></select></div>
+    </div>
+    <div class="row">
+      <button class="ghost" id="dbTest">ทดสอบการเชื่อมต่อ</button>
+      <button id="dbPull">ดึงกระดานจากฐานข้อมูล</button>
+      <button class="ghost" id="dbSetHook">ตั้ง Webhook ให้ส่งกระดานเข้าฐานข้อมูลนี้</button>
+    </div>
+    <div id="dbStatus" class="note" aria-live="polite"></div>
+
     <h3>Webhook (ส่งข้อมูลออกไปให้ระบบอื่น)</h3>
     <p class="note">เมื่อจบกระดาน ระบบ POST ข้อมูลเป็น JSON ไปยัง URL ที่ตั้งไว้ เช่น n8n, Make, Zapier หรือเซิร์ฟเวอร์ของคุณ เพื่อให้ฝั่งนั้นเก็บลงฐานข้อมูลและเรียก AI API ตรวจต่อได้ หน้าเว็บไฟล์เดียวนี้เปิดให้ระบบอื่นเข้ามาดึงข้อมูลเองไม่ได้ จึงใช้วิธีส่งออกแทน</p>
     <label for="hookUrl">Webhook URL</label>
@@ -497,7 +514,7 @@ function renderData(){
   if (n < 10) { lastAnalysis = null; box.innerHTML = n ? '<p class="note">ต้องมีข้อมูลอย่างน้อย 10 ตาเพื่อวิเคราะห์ (แนะนำ 500+ ตา)</p>' : ""; return; }
   const a = analyze(n ? data : []);
   lastAnalysis = a;
-  const rowsF = "BPT".map(k => `<tr><td>${NAMES[k]}</td><td>${a.cnt[k]}</td><td>${pc(a.cnt[k] / n)}</td><td>${pc(THEORY[k])}</td><td>${((a.cnt[k] / n - THEORY[k]) * 100).toFixed(2)}</td></tr>`).join("");
+  const rowsF = [..."BPT"].map(k => `<tr><td>${NAMES[k]}</td><td>${a.cnt[k]}</td><td>${pc(a.cnt[k] / n)}</td><td>${pc(THEORY[k])}</td><td>${((a.cnt[k] / n - THEORY[k]) * 100).toFixed(2)}</td></tr>`).join("");
   const sg = a.chiP < 0.05;
   const rg = a.runP !== null && a.runP < 0.05;
   const rowsT = ["B", "P"].map(k => {
@@ -854,7 +871,7 @@ function renderLive(){
 let boards = [];
 try { boards = JSON.parse(store.get("bacc_boards") || "[]").filter(b => b && typeof b.results === "string"); } catch { boards = []; }
 const saveBoards = () => store.set("bacc_boards", JSON.stringify(boards));
-let meta = { name: "", tag: "", target: 50, auto: false, hook: "", hookAuto: false, k: 3, filter: "" };
+let meta = { name: "", tag: "", target: 50, auto: false, hook: "", hookAuto: false, k: 3, filter: "", dbUrl: "", dbKey: "", dbN: "300", dbMin: 50, dbMode: "random", dbTag: "" };
 try { Object.assign(meta, JSON.parse(store.get("bacc_meta") || "{}")); } catch {}
 const saveMeta = () => store.set("bacc_meta", JSON.stringify(meta));
 const countsOf = str => { const c = { B: 0, P: 0, T: 0 }; for (const ch of str) if (c[ch] !== undefined) c[ch]++; return c; };
@@ -1429,6 +1446,64 @@ $("boardFile").onchange = async e => {
   }
   saveBoards(); saveMeta(); renderData();
   st.textContent = `กู้คืนสำเร็จ: เพิ่ม ${add} กระดาน${skip ? ` (ข้าม ${skip} ที่ซ้ำหรือว่าง)` : ""}${curMsg}`;
+};
+/* ---------- ฐานข้อมูลกลาง: ดึงกระดานผ่าน API ---------- */
+const dbBase = () => $("dbUrl").value.trim().replace(/\/+$/, "");
+async function dbGet(path){
+  const base = dbBase(), key = $("dbKey").value.trim();
+  if (!/^https?:\/\//i.test(base)) throw new Error("กรอก URL ที่ขึ้นต้นด้วย http:// หรือ https://");
+  let r;
+  try { r = await fetch(base + path, { headers: key ? { "X-API-Key": key } : {} }); }
+  catch { throw new Error("ติดต่อเซิร์ฟเวอร์ไม่ได้ (เปิด server.py หรือยัง / URL ถูกไหม / หน้าเว็บเป็น https แต่ฐานข้อมูลเป็น http จะถูกบล็อก)"); }
+  if (r.status === 401) throw new Error("โทเคนไม่ถูกต้อง");
+  if (!r.ok) throw new Error("เซิร์ฟเวอร์ตอบกลับ HTTP " + r.status);
+  return r.json();
+}
+const n0 = v => Number(v).toLocaleString("en-US");
+function fillDbTags(tags){
+  const sel = $("dbTag"), cur = meta.dbTag;
+  sel.innerHTML = '<option value="">ทั้งหมด</option>' + tags.map(t => `<option value="${esc(t.tag)}">${esc(t.tag)} (${n0(t.shoes)} กระดาน)</option>`).join("");
+  sel.value = tags.some(t => t.tag === cur) ? cur : ""; meta.dbTag = sel.value;
+}
+$("dbUrl").value = meta.dbUrl || (/^https?:/.test(location.protocol) ? location.origin : "http://localhost:8787");
+$("dbKey").value = meta.dbKey; $("dbN").value = meta.dbN; $("dbMin").value = meta.dbMin; $("dbMode").value = meta.dbMode;
+if (meta.dbTag) $("dbTag").innerHTML += `<option value="${esc(meta.dbTag)}">${esc(meta.dbTag)}</option>`, $("dbTag").value = meta.dbTag;
+[["dbUrl", "dbUrl"], ["dbKey", "dbKey"], ["dbN", "dbN"], ["dbMode", "dbMode"], ["dbTag", "dbTag"]].forEach(([id, k]) => { $(id).onchange = $(id).oninput = () => { meta[k] = $(id).value; saveMeta(); }; });
+$("dbMin").oninput = () => { meta.dbMin = Math.max(1, parseInt($("dbMin").value, 10) || 1); saveMeta(); };
+$("dbTest").onclick = async () => {
+  const st = $("dbStatus"); st.textContent = "กำลังเชื่อมต่อ…";
+  try {
+    const s = await dbGet("/api/stats"); fillDbTags(s.tags);
+    st.textContent = `เชื่อมต่อได้: ${n0(s.shoes)} กระดาน ${n0(s.hands)} ตา (B ${pc(s.freq.B)} / P ${pc(s.freq.P)} / T ${pc(s.freq.T)})`;
+  } catch (e) { st.textContent = "เชื่อมต่อไม่ได้: " + e.message; }
+};
+$("dbPull").onclick = async () => {
+  const st = $("dbStatus"), btn = $("dbPull"); st.textContent = "กำลังดึง…"; btn.disabled = true;
+  try {
+    const q = new URLSearchParams({ limit: $("dbN").value, min_hands: meta.dbMin || 1, order: $("dbMode").value });
+    if ($("dbTag").value) q.set("tag", $("dbTag").value);
+    const j = await dbGet("/api/boards?" + q);
+    const have = new Set(boards.map(b => b.id)), clean = x => String(x || "").toUpperCase().split("").filter(c => "BPT".includes(c)).join("");
+    let add = 0, skip = 0;
+    for (const b of j.boards || []) {
+      const res = clean(b.results);
+      if (!res || !b.id || have.has(b.id)) { skip++; continue; }
+      boards.push({ id: String(b.id), name: String(b.name || "ฐานข้อมูล"), tag: String(b.tag || "ไม่ระบุ"), at: b.at || new Date().toISOString(), results: res });
+      have.add(b.id); add++;
+    }
+    const json = JSON.stringify(boards); saveBoards(); renderData();
+    const full = store.get("bacc_boards") !== json;
+    st.textContent = `ดึงสำเร็จ: เพิ่ม ${n0(add)} กระดาน` + (skip ? ` (ข้าม ${n0(skip)} ที่ซ้ำ)` : "") + ` จากทั้งหมด ${n0(j.total)} ที่ตรงเงื่อนไข` +
+      (full ? " แต่พื้นที่เก็บข้อมูลของเบราว์เซอร์เต็ม ข้อมูลจะหายเมื่อรีเฟรช ลองลดจำนวนกระดานหรือลบกระดานเก่า" : "");
+  } catch (e) { st.textContent = "ดึงไม่สำเร็จ: " + e.message; }
+  btn.disabled = false;
+};
+$("dbSetHook").onclick = () => {
+  const base = dbBase(), key = $("dbKey").value.trim();
+  if (!/^https?:\/\//i.test(base)) { $("dbStatus").textContent = "กรอก URL ฐานข้อมูลก่อน"; return; }
+  meta.hook = base + "/hook" + (key ? "?key=" + encodeURIComponent(key) : ""); meta.hookAuto = true;
+  $("hookUrl").value = meta.hook; $("hookAuto").checked = true; saveMeta();
+  $("dbStatus").textContent = "ตั้ง Webhook แล้ว ทุกครั้งที่กด \"จบกระดาน\" จะส่งกระดานเข้าฐานข้อมูลนี้อัตโนมัติ (กดปุ่ม \"ส่งทดสอบ\" ในส่วน Webhook เพื่อตรวจ)";
 };
 $("fillGo").onclick = startFill;
 $("fillAI").onclick = fillAI;
