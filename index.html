@@ -1024,6 +1024,18 @@ function renderLive(){
       <div class="stat"><b class="neg">${bustAt}</b><span>แพ้ติดกันถึงจุดนี้เงินหมด</span></div>
     </div>
     ${rp.reached ? `<p class="note">ยอดถึงเป้าหมาย ${money(c.target)} ที่ตาที่ ${rp.reached} ของข้อมูลจริง</p>` : ""}
+    <h3>กราฟกำไร/ขาดทุนแบบเรียลไทม์</h3>
+    <div class="row" style="align-items:end">
+      <div style="max-width:260px"><label for="liveChartMode">มุมมองกราฟ</label>
+        <select id="liveChartMode" onchange="setLiveChartMode(this.value)">
+          <option value="one" ${liveChartMode === "one" ? "selected" : ""}>กลยุทธ์ที่เลือกไว้</option>
+          <option value="all" ${liveChartMode === "all" ? "selected" : ""}>เทียบทุกกลยุทธ์ (ผลจริงชุดเดียวกัน)</option>
+        </select></div>
+      <div id="liveSlope" class="note" aria-live="polite"></div>
+    </div>
+    <canvas id="liveChart" style="height:280px;touch-action:pan-y" role="img" aria-label="กราฟกำไรขาดทุนสะสมตามผลจริง"></canvas>
+    <div id="liveLegend" class="legend note"></div>
+    <div id="liveSummary"></div>
     <h3>ลำดับเดิมพันและยอดคงเหลือ</h3>
     <div class="tblwrap"><table>
       <thead><tr><th></th>${head}</tr></thead>
@@ -1038,7 +1050,152 @@ function renderLive(){
     ${rp.rows.length ? `<div class="scrollY"><table><thead><tr><th>ตา</th><th>ผลออก</th><th>แทง</th><th>เดิมพัน</th><th>ได้/เสีย</th><th>คงเหลือ</th></tr></thead><tbody>${tail}</tbody></table></div>
     <p class="note">${rp.rows.length > 100 ? "แสดง 100 ตาล่าสุด (ใหม่สุดอยู่บน) " : ""}เสมอ = คืนเงินเดิมพัน ตัวเลขนี้เป็นการเล่นสมมติตามข้อมูลที่กรอก ไม่ใช่การบอกว่าจะเกิดอะไรต่อ</p>`
     : '<p class="note">ยังไม่มีข้อมูลผลจริง ตารางนี้จะเดินตามผลที่คุณกรอกใน Data Lab</p>'}`;
+  buildLiveCurves(c, rp);
+  drawLiveChart(true);
 }
+
+/* ---------- กราฟกำไร/ขาดทุนเรียลไทม์ ---------- */
+const STRAT_NAMES = { flat: "Flat", martingale: "Martingale", paroli: "Paroli", dalembert: "D’Alembert", fibonacci: "Fibonacci", oscar: "Oscar’s Grind", "1326": "1-3-2-6" };
+const STRAT_COLORS = { flat: "#94a3b8", martingale: "#ef4444", paroli: "#22c55e", dalembert: "#3b82f6", fibonacci: "#a855f7", oscar: "#f59e0b", "1326": "#14b8a6" };
+let liveChartMode = store.get("bacc_liveChartMode") === "all" ? "all" : "one";
+let liveCurves = null, liveHover = -1, liveAnim = 0, liveAnimKey = "";
+function setLiveChartMode(v){ liveChartMode = v === "all" ? "all" : "one"; store.set("bacc_liveChartMode", liveChartMode); if (liveCurves) { buildLiveCurves(softCfg(), null); drawLiveChart(false); } }
+
+function buildLiveCurves(c, rp){
+  if (!c) { liveCurves = null; return; }
+  const names = liveChartMode === "all" ? Object.keys(STRAT_NAMES) : [c.strategy];
+  const series = names.map(n => {
+    const r = n === c.strategy && rp ? rp : replayLive({ ...c, strategy: n });
+    const pts = [0]; for (const x of r.rows) pts.push(Math.round((x.bal - c.balance) * 100) / 100);
+    return { name: n, pts, rows: r.rows, dead: r.dead };
+  });
+  liveCurves = { series, main: c.strategy, base: c.balance };
+  renderLiveInfo();
+}
+
+function renderLiveInfo(){
+  if (!liveCurves) return;
+  const m = liveCurves.series.find(x => x.name === liveCurves.main) || liveCurves.series[0];
+  const n = m.pts.length - 1, fin = m.pts[n], k = Math.min(10, n);
+  const slope = k > 0 ? (m.pts[n] - m.pts[n - k]) / k : 0;
+  let peak = 0, dd = 0; for (const v of m.pts) { peak = Math.max(peak, v); dd = Math.max(dd, peak - v); }
+  const arrow = slope > 0.005 ? "↗" : slope < -0.005 ? "↘" : "→";
+  const sl = $("liveSlope");
+  if (sl) sl.innerHTML = n ? `<b class="${slope >= 0 ? "pos" : "neg"}">${arrow} ความชัน ${signed(Math.round(slope * 100) / 100)} ต่อตา (${k} ตาล่าสุด)</b> · กำไรสะสม <b class="${fin >= 0 ? "pos" : "neg"}">${signed(fin)}</b> · ลงลึกสุดจากจุดสูงสุด <b class="neg">${money(Math.round(dd * 100) / 100)}</b>` : "ยังไม่มีเดิมพัน เส้นจะเริ่มวาดเมื่อกรอกผลจริง";
+  const base = liveCurves.base, r2 = v => Math.round(v * 100) / 100;
+  const stat = x => {
+    let w = 0, l = 0, t = 0, tot = 0, mx = 0;
+    for (const r of x.rows) { if (r.o === "W") w++; else if (r.o === "L") l++; else t++; if (r.o !== "T") tot += r.bet; mx = Math.max(mx, r.bet); }
+    const f = x.pts[x.pts.length - 1]; let pk = 0, lw = 0; for (const v of x.pts) { pk = Math.max(pk, v); lw = Math.min(lw, v); }
+    return { w, l, t, tot, mx, f, pk, lw };
+  };
+  const sm = $("liveSummary");
+  if (sm) {
+    if (liveChartMode === "all") {
+      sm.innerHTML = `<div class="tblwrap"><table><thead><tr><th>กลยุทธ์</th><th>ยอดคงเหลือ</th><th>กำไร/ขาดทุน</th><th>สูงสุด</th><th>ต่ำสุด</th></tr></thead><tbody>${liveCurves.series.map(x => { const z = stat(x); return `<tr><td>${STRAT_NAMES[x.name]}${x.name === liveCurves.main ? " ★" : ""}</td><td>${money(r2(base + z.f))}</td><td class="${z.f >= 0 ? "pos" : "neg"}">${signed(r2(z.f))}</td><td>${money(r2(base + z.pk))}</td><td>${money(r2(base + z.lw))}</td></tr>`; }).join("")}</tbody></table></div><p class="note">★ = กลยุทธ์ที่เลือกไว้ ยอดเริ่มต้น ${money(base)} ทุกกลยุทธ์ใช้ผลจริงชุดเดียวกัน</p>`;
+    } else if (n) {
+      const z = stat(m), pct = base ? z.f / base * 100 : 0;
+      sm.innerHTML = `<div class="stats">
+        <div class="stat"><b>${money(base)}</b><span>ยอดเริ่มต้น</span></div>
+        <div class="stat"><b class="${z.f >= 0 ? "pos" : "neg"}">${money(r2(base + z.f))}</b><span>ยอดคงเหลือตอนนี้</span></div>
+        <div class="stat"><b class="${z.f >= 0 ? "pos" : "neg"}">${signed(r2(z.f))}</b><span>${z.f >= 0 ? "กำไร" : "ขาดทุน"} (${signed(r2(pct))}%)</span></div>
+        <div class="stat"><b>${money(r2(base + z.pk))}</b><span>ยอดสูงสุดที่เคยถึง (${signed(r2(z.pk))})</span></div>
+        <div class="stat"><b>${money(r2(base + z.lw))}</b><span>ยอดต่ำสุดที่เคยถึง (${signed(r2(z.lw))})</span></div>
+        <div class="stat"><b>${money(r2(z.tot))}</b><span>เงินที่ลงเดิมพันรวม (เดิมพันสูงสุด ${money(z.mx)})</span></div>
+        <div class="stat"><b><span class="pos">${z.w}</span> / <span class="neg">${z.l}</span> / ${z.t}</b><span>ชนะ / แพ้ / เสมอ</span></div>
+      </div>`;
+    } else sm.innerHTML = "";
+  }
+  const lg = $("liveLegend");
+  if (lg) lg.innerHTML = liveChartMode === "all"
+    ? liveCurves.series.map(x => { const f = x.pts[x.pts.length - 1]; return `<span><i class="ball sm" style="--c:${STRAT_COLORS[x.name]}"></i>${STRAT_NAMES[x.name]} <b class="${f >= 0 ? "pos" : "neg"}">${signed(f)}</b>${x.dead ? " (เงินหมด)" : ""}</span>`; }).join("")
+    : '<span><i class="ball sm" style="--c:var(--green)"></i>ช่วงขึ้น (กำไร)</span><span><i class="ball sm" style="--c:var(--red)"></i>ช่วงลง (ขาดทุน)</span><span>เส้นประ = จุดเริ่มต้น (0)</span>';
+}
+
+function drawLiveChart(animate){
+  const cv = $("liveChart"); if (!cv || !liveCurves) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  const key = liveCurves.series.map(x => x.name + x.pts.length).join("|");
+  if (animate && key !== liveAnimKey) { liveAnimKey = key; cancelAnimationFrame(liveAnim); const t0 = performance.now(); const step = t => { const p = Math.min(1, (t - t0) / 450); paintLive(cv, 1 - Math.pow(1 - p, 3)); if (p < 1) liveAnim = requestAnimationFrame(step); }; liveAnim = requestAnimationFrame(step); return; }
+  paintLive(cv, 1);
+}
+
+function paintLive(cv, prog){
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement), cl = nm => css.getPropertyValue(nm).trim();
+  const S = liveCurves.series, one = liveChartMode !== "all";
+  const len = Math.max(1, ...S.map(x => x.pts.length - 1));
+  let lo = 0, hi = 0; for (const x of S) for (const v of x.pts) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (hi === lo) { hi += 1; lo -= 1; } const pad = (hi - lo) * 0.08; hi += pad; lo -= pad;
+  const padL = 52, padR = 12, padT = 12, padB = 22;
+  const X = i => padL + i / len * (w - padL - padR), Y = v => padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
+  g.font = "11px system-ui, sans-serif"; g.fillStyle = cl("--muted"); g.strokeStyle = cl("--line"); g.lineWidth = 1;
+  g.textAlign = "right";
+  for (let t = 0; t <= 4; t++) { const v = lo + (hi - lo) * t / 4, y = Y(v); g.globalAlpha = .5; g.beginPath(); g.moveTo(padL, y); g.lineTo(w - padR, y); g.stroke(); g.globalAlpha = 1; g.fillText(money(Math.round(v + liveCurves.base)), padL - 6, y + 4); }
+  g.textAlign = "center"; g.fillText("ตา 0", padL, h - 6); g.textAlign = "left"; g.fillStyle = cl("--amber"); g.fillText("ยอดเริ่มต้น " + money(liveCurves.base), padL + 4, Y(0) - 5); g.textAlign = "center"; g.fillStyle = cl("--muted"); g.fillText("ตา " + len, w - padR - 10, h - 6);
+  g.setLineDash([5, 4]); g.strokeStyle = cl("--amber"); g.beginPath(); g.moveTo(padL, Y(0)); g.lineTo(w - padR, Y(0)); g.stroke(); g.setLineDash([]);
+  const green = cl("--green"), red = cl("--red"), muted = cl("--muted");
+  // ความยาวที่วาดตามอนิเมชัน (ตาสุดท้ายค่อย ๆ ลากเข้า)
+  const upto = (pts) => { const n = pts.length - 1; if (n < 1) return { n: 0, f: 0 }; return { n: n - 1, f: prog }; };
+  for (const x of S) {
+    const pts = x.pts, n = pts.length - 1; if (n < 1) continue;
+    const u = upto(pts), px = [], py = [];
+    for (let i = 0; i <= u.n; i++) { px.push(X(i)); py.push(Y(pts[i])); }
+    const lx = X(u.n) + (X(n) - X(u.n)) * u.f, ly = Y(pts[u.n]) + (Y(pts[n]) - Y(pts[u.n])) * u.f;
+    px.push(lx); py.push(ly);
+    if (one) {
+      const z = Y(0);
+      for (const [col, above] of [[green, true], [red, false]]) {
+        g.save(); g.beginPath(); g.rect(padL, above ? 0 : z, w - padL - padR, above ? z : h - z); g.clip();
+        g.globalAlpha = 0.16; g.fillStyle = col; g.beginPath(); g.moveTo(px[0], z);
+        px.forEach((vx, i) => g.lineTo(vx, py[i])); g.lineTo(px[px.length - 1], z); g.closePath(); g.fill(); g.restore();
+      }
+      g.lineWidth = 2.5; g.lineJoin = "round"; g.lineCap = "round";
+      for (let i = 1; i < px.length; i++) {
+        const d = i < px.length - 1 || prog >= 1 ? pts[i] - pts[i - 1] : pts[n] - pts[n - 1];
+        g.strokeStyle = d > 0 ? green : d < 0 ? red : muted;
+        g.beginPath(); g.moveTo(px[i - 1], py[i - 1]); g.lineTo(px[i], py[i]); g.stroke();
+      }
+    } else {
+      g.strokeStyle = STRAT_COLORS[x.name]; g.lineWidth = x.name === liveCurves.main ? 3 : 1.6; g.globalAlpha = x.name === liveCurves.main ? 1 : 0.8;
+      g.lineJoin = "round"; g.beginPath(); px.forEach((vx, i) => i ? g.lineTo(vx, py[i]) : g.moveTo(vx, py[i])); g.stroke(); g.globalAlpha = 1;
+    }
+    // จุดล่าสุด
+    const fin = pts[n], dc = one ? (fin >= 0 ? green : red) : STRAT_COLORS[x.name];
+    if (!one && x.name !== liveCurves.main) continue;
+    g.fillStyle = dc; g.globalAlpha = .25; g.beginPath(); g.arc(lx, ly, 8, 0, 7); g.fill(); g.globalAlpha = 1;
+    g.beginPath(); g.arc(lx, ly, 4, 0, 7); g.fill();
+    g.textAlign = lx > w - 150 ? "right" : "left"; g.fillStyle = dc; g.font = "bold 12px system-ui, sans-serif";
+    g.fillText(money(Math.round((fin + liveCurves.base) * 100) / 100) + " (" + signed(fin) + ")", lx + (lx > w - 150 ? -10 : 10), ly - 10);
+  }
+  // crosshair
+  if (liveHover >= 0 && one) {
+    const m = S[0], i = Math.min(liveHover, m.pts.length - 1), v = m.pts[i], hx = X(i), hy = Y(v);
+    g.strokeStyle = muted; g.lineWidth = 1; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(hx, padT); g.lineTo(hx, h - padB); g.stroke(); g.setLineDash([]);
+    g.fillStyle = cl("--fg") || muted; g.beginPath(); g.arc(hx, hy, 4, 0, 7); g.fill();
+    const row = i > 0 ? m.rows[i - 1] : null;
+    const label = `ตา ${row ? row.i : 0}: ยอด ${money(Math.round((v + liveCurves.base) * 100) / 100)} (${signed(v)})` + (row ? ` (${row.o === "W" ? "ชนะ" : row.o === "L" ? "แพ้" : "เสมอ"} ${money(row.bet)})` : "");
+    g.font = "12px system-ui, sans-serif"; const tw = g.measureText(label).width + 12, tx = Math.min(Math.max(hx - tw / 2, padL), w - padR - tw);
+    g.fillStyle = cl("--panel") || "#fff"; g.strokeStyle = cl("--line"); g.fillRect(tx, padT, tw, 22); g.strokeRect(tx, padT, tw, 22);
+    g.fillStyle = cl("--fg") || muted; g.textAlign = "left"; g.fillText(label, tx + 6, padT + 15);
+  }
+}
+
+(function liveChartEvents(){
+  const move = e => {
+    const cv = e.target && e.target.id === "liveChart" ? e.target : null; if (!cv || !liveCurves) return;
+    const r = cv.getBoundingClientRect(), len = Math.max(1, liveCurves.series[0].pts.length - 1);
+    const i = Math.round((e.clientX - r.left - 52) / (r.width - 64) * len);
+    liveHover = Math.max(0, Math.min(len, i)); paintLive(cv, 1);
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerdown", move);
+  document.addEventListener("pointerout", e => { if (e.target && e.target.id === "liveChart") { liveHover = -1; paintLive(e.target, 1); } });
+  window.addEventListener("resize", () => drawLiveChart(false));
+})();
 
 /* ---------- Boards: ชุดข้อมูลหลายกระดาน ---------- */
 let boards = [];
