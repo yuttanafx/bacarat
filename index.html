@@ -132,6 +132,7 @@ body.dt .bacOnly{display:none}
 dialog#loginDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:20px;width:min(380px,92vw)}
 dialog#loginDlg::backdrop{background:rgba(0,0,0,.6)}
 dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+#predict.calc{opacity:.55;transition:opacity .15s}
 .srcL{font-size:.85rem;color:var(--muted);margin-top:4px}.srcL.on{color:var(--fg);font-weight:600}
 .slotRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 8px}.slotRow .gameSw{margin:0}
 .authBar{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:.85rem}
@@ -852,13 +853,23 @@ async function runOOS(){
     <div class="verdict">ช่วงคลาดเคลื่อนประมาณ ±${(ci * 100).toFixed(2)}% · ${verdict}</div>`;
 }
 
-function predictAll(s){
+// เก็บผลคำนวณหนัก (predictAll / backtest) ไว้ใช้ซ้ำเมื่อข้อมูลชุดเดิม (เช่น วาดซ้ำหลังฮุกสองตอบ, สลับแหล่งคาดการณ์)
+const _memo = {};
+function memoSeq(k, s, f){
+  const sig = s.length + ":" + minN() + ":" + s.join("");
+  const m = _memo[k];
+  if (m && m.sig === sig) return m.v;
+  const v = f(); _memo[k] = { sig, v }; return v;
+}
+function predictAll(s){ return memoSeq("pa", s, () => predictAllRaw(s)); }
+function predictAllRaw(s){
   const each = METHODS.map(m => ({ name: m.name, p: m.f(s) }));
   return { each, pB: each.reduce((a, x) => a + x.p, 0) / each.length };
 }
 
 // walk-forward backtest: ทำนายทีละตาโดยใช้เฉพาะข้อมูลก่อนหน้า
-function backtest(s){
+function backtest(s){ return memoSeq("bt", s, () => backtestRaw(s)); }
+function backtestRaw(s){
   const start = Math.max(Math.min(15, minN()), s.length - 1500);
   const rows = METHODS.map(m => ({ name: m.name, hit: 0 }));
   const comb = { name: "รวมทุกวิธี", hit: 0 }, base = { name: "แทง Banker ทุกตา (อ้างอิง)", hit: 0 };
@@ -872,6 +883,55 @@ function backtest(s){
     n++;
   }
   return { n, rows: [...rows, comb, base], comb, base };
+}
+
+/* ---------- Worker: คำนวณคาดการณ์/ย้อนทดสอบเบื้องหลัง ไม่ให้หน้าค้างตอนเพิ่มข้อมูล ---------- */
+let wk = null, wBusy = false, wQueued = null, wInflight = "", wSentKey = "__none__", wRes = null, wFail = false, wId = 0;
+function workerSrc(){
+  return `"use strict";
+const AK = ${AK}, AM = ${AM};
+const laplace = ${laplace.toString()};
+let MODEL = null, _minN = 15;
+const getAnalog = () => MODEL, minN = () => _minN;
+${analogP.toString()}
+const F = [${METHODS.map(m => m.f.toString()).join(",")}];
+const NAMES = ${JSON.stringify(METHODS.map(m => m.name))};
+const METHODS = F.map((f, i) => ({ name: NAMES[i], f }));
+${predictAllRaw.toString()}
+${backtestRaw.toString()}
+onmessage = e => { const d = e.data; if (d.model) MODEL = d.model; _minN = d.minN;
+  const pa = predictAllRaw(d.s), bt = backtestRaw(d.s); postMessage({ id: d.id, sig: d.sig, pa, bt }); };`;
+}
+function sigOf(s){ const m = getAnalog(); return s.length + ":" + minN() + ":" + (m.key || "ovr") + ":" + s.join(""); }
+function heavyFor(s){
+  const sig = sigOf(s);
+  if (wRes && wRes.sig === sig) return wRes;
+  if (wFail) return (wRes = { sig, pa: predictAll(s), bt: backtest(s) }); // ไม่มี Worker: ทำแบบเดิม
+  requestHeavy(s, sig);
+  return null;
+}
+function requestHeavy(s, sig){
+  if (sig === wInflight || (wQueued && wQueued.sig === sig)) return;
+  try {
+    if (!wk) {
+      wk = new Worker(URL.createObjectURL(new Blob([workerSrc()], { type: "text/javascript" })));
+      wk.onmessage = onWorker;
+      wk.onerror = () => { wFail = true; wBusy = false; wInflight = ""; wQueued = null; renderPredict(); };
+    }
+  } catch { wFail = true; renderPredict(); return; }
+  const job = { sig, s: s.slice(), minN: minN() };
+  if (wBusy) { wQueued = job; return; } // ระหว่างคำนวณ เก็บไว้แค่งานล่าสุดงานเดียว
+  sendJob(job);
+}
+function sendJob(job){
+  const m = getAnalog(), msg = { id: ++wId, sig: job.sig, s: job.s, minN: job.minN };
+  if (wSentKey !== (m.key || null)) { msg.model = { B: m.B, N: m.N }; wSentKey = m.key || null; }
+  wBusy = true; wInflight = job.sig; wk.postMessage(msg);
+}
+function onWorker(e){
+  const d = e.data; wBusy = false; wInflight = ""; wRes = { sig: d.sig, pa: d.pa, bt: d.bt };
+  if (wQueued) { const j = wQueued; wQueued = null; sendJob(j); }
+  renderPredict();
 }
 
 function spinColor(final){
@@ -932,8 +992,11 @@ function renderPredict(){
     ghostPick = null; lastRevealN = -1; renderBead();
     return;
   }
-  const r = predictAll(s);
   if (!(h2Pred && h2Pred.n === n) || (h2Pred.needLogin && sessTok())) fetchH2();
+  const hv = heavyFor(s);
+  if (!hv) { box.classList.add("calc"); renderBead(); return; } // รอ Worker คำนวณ: คงข้อความเดิมไว้ก่อน แล้ววาดใหม่เมื่อเสร็จ
+  box.classList.remove("calc");
+  const r = hv.pa;
   const h2ok = !!(h2Pred && h2Pred.n === n && !h2Pred.err);
   const src = predSrc() === "hook2" && h2ok ? "hook2" : "local";
   const pBuse = src === "hook2" ? h2Pred.pB : r.pB;
@@ -964,7 +1027,7 @@ function renderPredict(){
 
   let btHtml = "", btText = "";
   if (s.length >= minN() + 10) {
-    const bt = backtest(s), ci = 1.96 * Math.sqrt(0.25 / bt.n);
+    const bt = hv.bt, ci = 1.96 * Math.sqrt(0.25 / bt.n);
     const body = bt.rows.map(x => `<tr><td>${x.name}</td><td>${pc(x.hit / bt.n)}</td></tr>`).join("");
     const diff = bt.comb.hit / bt.n - bt.base.hit / bt.n;
     const verdict = Math.abs(diff) <= ci * Math.SQRT2
@@ -1072,16 +1135,27 @@ function ladder(c, mode, steps){
   return out;
 }
 
-let predCache = { key: "", picks: [] };
-function predPicks(){
-  const mn = minN(), key = data.join("") + "|" + mn;
-  if (predCache.key === key) return predCache.picks;
-  const picks = new Array(data.length).fill(null), s = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i >= mn && s.length >= 5) picks[i] = predictAll(s).pB >= 0.5 ? "B" : "P";
+// ผลคาดการณ์ของแต่ละตา (ใช้ในการจำลองเดิมพันแบบ "ตามคาดการณ์ของระบบ") ขึ้นกับข้อมูลก่อนหน้าตานั้นเท่านั้น
+// จึงเพิ่มต่อท้ายแล้วคำนวณแค่ตาใหม่ / ลบท้ายแล้วตัดทิ้ง / เปลี่ยนอย่างอื่นค่อยคำนวณใหม่ทั้งหมด
+let predCache = { str: "", picks: [], mn: -1, mk: "" };
+function fillPicks(picks, start, mn){
+  const s = nonTie(data.slice(0, start));
+  for (let i = start; i < data.length; i++) {
+    picks[i] = (i >= mn && s.length >= 5) ? (predictAll(s).pB >= 0.5 ? "B" : "P") : null;
     if (data[i] !== "T") s.push(data[i]);
   }
-  predCache = { key, picks };
+  return picks;
+}
+function predPicks(){
+  const mn = minN(), mk = getAnalog().key || "ovr", str = data.join(""), c = predCache;
+  let picks;
+  if (c.mn === mn && c.mk === mk) {
+    if (c.str === str) return c.picks;
+    if (str.startsWith(c.str)) picks = fillPicks(c.picks.slice(), c.str.length, mn);   // เพิ่มต่อท้าย
+    else if (c.str.startsWith(str)) picks = c.picks.slice(0, str.length);               // ลบท้าย
+  }
+  if (!picks) picks = fillPicks(new Array(data.length).fill(null), 0, mn);               // เปลี่ยนเงื่อนไข/ข้อมูลทั้งชุด
+  predCache = { str, picks, mn, mk };
   return picks;
 }
 
