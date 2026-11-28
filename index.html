@@ -74,9 +74,12 @@ th{color:var(--muted);font-weight:600}
 .hero .ball.big{position:absolute;inset:21px;width:auto;height:auto;font-size:3rem;box-shadow:inset 0 -10px 14px rgba(0,0,0,.28),0 8px 16px rgba(0,0,0,.28);animation:float 3.2s ease-in-out infinite}
 @keyframes float{50%{transform:translateY(-5px)}}
 .hero.play .arc{animation:fill 1.3s cubic-bezier(.2,.8,.2,1) .35s backwards}
-@keyframes fill{from{stroke-dashoffset:427.3}}
+@keyframes fill{from{stroke-dashoffset:var(--c,427.3)}}
 .hero.play .ball.big{animation:roll .95s cubic-bezier(.2,.9,.3,1.15),float 3.2s ease-in-out .95s infinite}
 @keyframes roll{0%{transform:translateX(-170px) rotate(-540deg) scale(.55);opacity:0}65%{opacity:1}100%{transform:none}}
+.hero.two .ball.big{inset:26px;font-size:2.6rem}.srcSw{margin:8px 0 0;justify-content:center}
+.ringBox{text-align:center}.ringCap{font-size:.85rem;color:var(--muted);margin-top:4px}.ringBox.on .ringCap{color:var(--fg);font-weight:600}
+.hero.off .ball.big{background:var(--panel2);color:var(--muted);box-shadow:none;animation:none;font-size:2rem}
 .heroTxt b{font-size:1.4rem;display:block}
 .heroTxt span{font-size:.85rem;color:var(--muted)}
 .scrollY{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px}
@@ -872,9 +875,9 @@ function backtest(s){
 }
 
 function spinColor(final){
-  const hero = document.querySelector("#predict .hero");
+  const hero = document.querySelector("#predict .hero.sel") || document.querySelector("#predict .hero");
   if (!hero) return;
-  const els = [hero.querySelector(".ball.big"), hero.querySelector(".arc"), document.querySelector("#seqView .ball.ghost")].filter(Boolean);
+  const els = [hero.querySelector(".ball.big"), (hero.querySelector(".arc.sel") || hero.querySelector(".arc")), document.querySelector("#seqView .ball.ghost")].filter(Boolean);
   const N = 7, seq = Array.from({ length: N }, (_, k) => ((N - 1 - k) % 2 === 0) ? final : (final === "B" ? "P" : "B"));
   let at = 350;
   seq.forEach((c, k) => {
@@ -940,6 +943,19 @@ function renderPredict(){
   const h2Line = h2ok
     ? `${bp(h2Pred.pB)} (ไม่นับ Tie)${h2Pred.backtest ? ` · ย้อนทดสอบ ${pc(h2Pred.backtest.accuracy)} เทียบแทง Banker ทุกตา ${pc(h2Pred.backtest.baseline)} (n=${h2Pred.backtest.n})` : ""}`
     : (h2Pred && h2Pred.n === n ? esc(h2Pred.err) : "กำลังคำนวณ…");
+  const ringsHtml = () => {
+    const mk = pB => pB == null ? null : { pk: pB >= 0.5 ? "B" : "P", q: pB >= 0.5 ? pB : 1 - pB };
+    const L = mk(r.pB), H = h2ok ? mk(h2Pred.pB) : null;
+    const RO = 74, RI = 62, CO = 2 * Math.PI * RO, CI = 2 * Math.PI * RI;
+    const track = R => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"${R === RO && !H ? ' stroke-dasharray="4 6"' : ""}/>`;
+    const arc = (R, C, d, sel) => d ? `<circle class="arc ${d.pk}${sel ? " sel" : ""}" cx="80" cy="80" r="${R}" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - d.q)).toFixed(1)}" style="--c:${C.toFixed(1)};opacity:${sel ? 1 : .45}"/>` : "";
+    const tag = on => on ? " · ใช้อยู่" : "";
+    const hTxt = H ? `${H.pk} ${pc(H.q)}` : (h2Pred && h2Pred.n === n && h2Pred.err ? esc(h2Pred.err) : "กำลังคำนวณ…");
+    const sw = predSrc();
+    return `<div class="ringBox"><div class="hero two${play}${src ? " sel" : ""}"><svg viewBox="0 0 160 160" aria-hidden="true">${track(RO)}${track(RI)}${arc(RO, CO, H, src === "hook2")}${arc(RI, CI, L, src === "local")}</svg><span class="ball big ${pick}" aria-hidden="true">${pick}</span></div>
+      <div class="gameSw srcSw" role="group" aria-label="เลือกแหล่งคาดการณ์"><button type="button" data-src="local" aria-pressed="${sw === "local"}">ระบบเดิม</button><button type="button" data-src="hook2" aria-pressed="${sw === "hook2"}">ฮุกสอง</button></div>
+      <div class="ringCap">วงนอก ฮุกสอง ${hTxt}${tag(src === "hook2")}<br>วงใน ระบบเดิม ${L.pk} ${pc(L.q)}${tag(src === "local")}</div></div>`;
+  };
   const srcLines = `<div class="srcL${src === "local" ? " on" : ""}">ระบบเดิม: ${bp(r.pB)} (ไม่นับ Tie)</div>
         <div class="srcL${src === "hook2" ? " on" : ""}">ฮุกสอง: ${h2Line}</div>
         ${predSrc() === "hook2" && !h2ok ? '<div class="srcL">ฮุกสองยังไม่พร้อม ใช้ระบบเดิมไปก่อน</div>' : ""}
@@ -984,10 +1000,7 @@ function renderPredict(){
     <h3>คาดการณ์ตาถัดไปจากข้อมูล ${n} ตา</h3>
     ${n < 30 ? '<p class="note">ข้อมูลน้อยกว่า 30 ตา ผลแกว่งมากและเชื่อถือไม่ได้</p>' : ""}
     <div class="heroWrap">
-      <div class="hero${play}">
-        <svg viewBox="0 0 150 150" aria-hidden="true"><circle cx="75" cy="75" r="68" fill="none" stroke="var(--line)" stroke-width="7"/><circle class="arc ${pick}" cx="75" cy="75" r="68" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="427.3" stroke-dashoffset="${off}"/></svg>
-        <span class="ball big ${pick}" aria-hidden="true">${pick}</span>
-      </div>
+      ${ringsHtml()}
       <div class="heroTxt">
         <b>${pick === "B" ? "Banker (B)" : "Player (P)"}</b>
         <span>${near ? "ใกล้เคียงกัน แทบแยกไม่ออก" : src === "hook2" ? "ฝั่งที่ฮุกสองเลือก" : "ฝั่งที่วิธีรวมเลือก"} · ${pc(pp)} (ไม่นับ Tie)<br>วงแหวนเต็มครึ่งวง = 50% = เท่ากับเดา<br>โอกาสออก Tie ~9.5% ทุกตา ไม่เกี่ยวกับประวัติ</span>
@@ -1031,6 +1044,7 @@ async function aiPredict(){
 $("minN").onchange = () => { store.set("bacc_minN", $("minN").value); renderPredict(); };
 $("predSrc").value = store.get("bacc_predSrc") === "hook2" ? "hook2" : "local";
 $("predSrc").onchange = () => { store.set("bacc_predSrc", $("predSrc").value); renderPredict(); };
+$("predict").addEventListener("click", e => { const b = e.target.closest && e.target.closest(".srcSw button"); if (!b) return; $("predSrc").value = b.dataset.src; store.set("bacc_predSrc", b.dataset.src); renderPredict(); });
 $("predict").addEventListener("click", e => { if (e.target.id === "aiPredict") aiPredict(); });
 
 /* ---------- Live bankroll & bet table ---------- */
