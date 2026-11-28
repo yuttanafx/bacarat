@@ -129,6 +129,7 @@ body.dt .bacOnly{display:none}
 dialog#loginDlg{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:20px;width:min(380px,92vw)}
 dialog#loginDlg::backdrop{background:rgba(0,0,0,.6)}
 dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+.srcL{font-size:.85rem;color:var(--muted);margin-top:4px}.srcL.on{color:var(--fg);font-weight:600}
 .slotRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 8px}.slotRow .gameSw{margin:0}
 .authBar{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:.85rem}
 .authBar button{padding:5px 12px}
@@ -235,6 +236,13 @@ dialog#loginDlg h2{margin:0 0 4px}#loginErr{color:var(--red);min-height:1.2em;ma
         <option value="10">10 ตา</option>
         <option value="20">20 ตา</option>
         <option value="30" selected>30 ตา</option>
+      </select>
+    </div>
+    <div style="max-width:260px;margin-top:10px">
+      <label for="predSrc">ใช้ผลคาดการณ์จาก</label>
+      <select id="predSrc">
+        <option value="local" selected>ระบบเดิม</option>
+        <option value="hook2">ผลจากฮุกสอง</option>
       </select>
     </div>
     <div id="predict"></div>
@@ -893,6 +901,27 @@ function renderBead(){
 const minN = () => parseInt($("minN").value, 10) || 30;
 let aiPred = null; // { n, pick, prob, reason, err }
 
+/* ---------- คาดการณ์จากฮุกสอง (ส่งผ่านตัวส่งต่อของเว็บนี้ ต้องล็อกอินสมาชิก) ---------- */
+let h2Pred = null, h2Timer = null;
+const predSrc = () => $("predSrc").value;
+const sessTok = () => { try { const ss = JSON.parse(localStorage.getItem("bacc_session") || "null"); return (ss && ss.token) || ""; } catch { return ""; } };
+function fetchH2(){
+  clearTimeout(h2Timer);
+  const n = data.length;
+  h2Timer = setTimeout(async () => {
+    if (n !== data.length) return;
+    const tok = sessTok();
+    if (!tok) { h2Pred = { n, err: "ต้องเข้าสู่ระบบสมาชิกก่อน", needLogin: true }; renderPredict(); return; }
+    try {
+      const r = await fetch(location.origin + "/api/hook2", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+        body: JSON.stringify({ event: "predict", game: GAME === "dt" ? "dragon_tiger" : "baccarat", results: nonTie(data).join("") }) });
+      const j = await r.json().catch(() => ({}));
+      h2Pred = r.ok && j.ok ? { ...j, n } : { n, err: r.status === 401 ? "ต้องเข้าสู่ระบบสมาชิกก่อน" : (j.error || "ฮุกสองตอบกลับ HTTP " + r.status), needLogin: r.status === 401 };
+    } catch { h2Pred = { n, err: "ติดต่อฮุกสองไม่ได้" }; }
+    if (n === data.length) renderPredict();
+  }, 350);
+}
+
 function renderPredict(){
   const box = $("predict"), n = data.length, s = nonTie(data);
   if (n < minN() || s.length < 5) {
@@ -901,8 +930,20 @@ function renderPredict(){
     return;
   }
   const r = predictAll(s);
-  const pick = r.pB >= 0.5 ? "B" : "P", pp = pick === "B" ? r.pB : 1 - r.pB;
-  const near = Math.abs(r.pB - 0.5) < 0.03;
+  if (!(h2Pred && h2Pred.n === n) || (h2Pred.needLogin && sessTok())) fetchH2();
+  const h2ok = !!(h2Pred && h2Pred.n === n && !h2Pred.err);
+  const src = predSrc() === "hook2" && h2ok ? "hook2" : "local";
+  const pBuse = src === "hook2" ? h2Pred.pB : r.pB;
+  const pick = pBuse >= 0.5 ? "B" : "P", pp = pick === "B" ? pBuse : 1 - pBuse;
+  const near = Math.abs(pBuse - 0.5) < 0.03;
+  const bp = v => `<strong>B ${pc(v)}</strong> · <strong>P ${pc(1 - v)}</strong>`; // ไม่ใช้ <b> เพราะ .heroTxt b ถูกจัดเป็นบล็อกใหญ่
+  const h2Line = h2ok
+    ? `${bp(h2Pred.pB)} (ไม่นับ Tie)${h2Pred.backtest ? ` · ย้อนทดสอบ ${pc(h2Pred.backtest.accuracy)} เทียบแทง Banker ทุกตา ${pc(h2Pred.backtest.baseline)} (n=${h2Pred.backtest.n})` : ""}`
+    : (h2Pred && h2Pred.n === n ? esc(h2Pred.err) : "กำลังคำนวณ…");
+  const srcLines = `<div class="srcL${src === "local" ? " on" : ""}">ระบบเดิม: ${bp(r.pB)} (ไม่นับ Tie)</div>
+        <div class="srcL${src === "hook2" ? " on" : ""}">ฮุกสอง: ${h2Line}</div>
+        ${predSrc() === "hook2" && !h2ok ? '<div class="srcL">ฮุกสองยังไม่พร้อม ใช้ระบบเดิมไปก่อน</div>' : ""}
+        ${h2ok && h2Pred.backtest ? `<div class="srcL">${esc(h2Pred.backtest.verdict)}</div>` : ""}`;
   const eachRows = r.each.map(x => `<tr><td>${x.name}</td><td><span class="ball sm ${x.p >= 0.5 ? "B" : "P"}">${x.p >= 0.5 ? "B" : "P"}</span></td><td>${pc(x.p >= 0.5 ? x.p : 1 - x.p)}</td></tr>`).join("");
 
   let btHtml = "", btText = "";
@@ -949,7 +990,8 @@ function renderPredict(){
       </div>
       <div class="heroTxt">
         <b>${pick === "B" ? "Banker (B)" : "Player (P)"}</b>
-        <span>${near ? "ใกล้เคียงกัน แทบแยกไม่ออก" : "ฝั่งที่วิธีรวมเลือก"} · ${pc(pp)} (ไม่นับ Tie)<br>วงแหวนเต็มครึ่งวง = 50% = เท่ากับเดา<br>โอกาสออก Tie ~9.5% ทุกตา ไม่เกี่ยวกับประวัติ</span>
+        <span>${near ? "ใกล้เคียงกัน แทบแยกไม่ออก" : src === "hook2" ? "ฝั่งที่ฮุกสองเลือก" : "ฝั่งที่วิธีรวมเลือก"} · ${pc(pp)} (ไม่นับ Tie)<br>วงแหวนเต็มครึ่งวง = 50% = เท่ากับเดา<br>โอกาสออก Tie ~9.5% ทุกตา ไม่เกี่ยวกับประวัติ</span>
+        ${srcLines}
         ${betLine}
       </div>
     </div>
@@ -987,6 +1029,8 @@ async function aiPredict(){
 }
 (function(){ const m = store.get("bacc_minN"); if (m && ["10","20","30"].includes(m)) $("minN").value = m; })();
 $("minN").onchange = () => { store.set("bacc_minN", $("minN").value); renderPredict(); };
+$("predSrc").value = store.get("bacc_predSrc") === "hook2" ? "hook2" : "local";
+$("predSrc").onchange = () => { store.set("bacc_predSrc", $("predSrc").value); renderPredict(); };
 $("predict").addEventListener("click", e => { if (e.target.id === "aiPredict") aiPredict(); });
 
 /* ---------- Live bankroll & bet table ---------- */
