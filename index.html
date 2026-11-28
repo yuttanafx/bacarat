@@ -124,7 +124,7 @@ dialog#cfgDlg{border:1px solid var(--line);border-radius:12px;background:var(--p
 dialog#cfgDlg::backdrop{background:rgba(0,0,0,.5)}
 dialog#cfgDlg h2{margin:0 0 12px}
 .gameSw{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 10px}
-.gameSw button{border:0;border-radius:0;background:var(--panel2);color:var(--fg);padding:9px 16px;font-weight:700;margin:0}
+.gameSw button{border:0;border-radius:0;background:var(--panel2);color:var(--fg);padding:9px 16px;font-weight:700;margin:0;white-space:nowrap}
 .gameSw button[aria-pressed="true"]{background:var(--green);color:#fff}
 body:not(.dt) .dtOnly{display:none}
 body.dt .bacOnly{display:none}
@@ -899,8 +899,33 @@ const NAMES = ${JSON.stringify(METHODS.map(m => m.name))};
 const METHODS = F.map((f, i) => ({ name: NAMES[i], f }));
 ${predictAllRaw.toString()}
 ${backtestRaw.toString()}
-onmessage = e => { const d = e.data; if (d.model) MODEL = d.model; _minN = d.minN;
-  const pa = predictAllRaw(d.s), bt = backtestRaw(d.s); postMessage({ id: d.id, sig: d.sig, pa, bt }); };`;
+// ย้อนทดสอบแบบเพิ่มทีละตา: เก็บผลถูก/ผิดของแต่ละตาไว้ ตาใหม่คำนวณเพิ่มแค่ตาเดียว (เดิมคำนวณใหม่ทั้ง 1500 ตาทุกครั้ง) ผลลัพธ์เท่าเดิมทุกประการ
+let BTC = null, modelVer = 0;
+function backtestInc(s){
+  const len = s.length, str = s.join(""), mn = _minN, start = Math.max(Math.min(15, mn), len - 1500), nm = F.length;
+  let c = BTC;
+  if (!c || c.mv !== modelVer || c.mn !== mn || str.length < c.str.length || str.slice(0, c.str.length) !== c.str) {
+    const cap = len + 256;
+    c = BTC = { mv: modelVer, mn, str: "", done: start, cap, H: F.map(() => new Uint8Array(cap)), C: new Uint8Array(cap), Bs: new Uint8Array(cap) };
+  }
+  if (len > c.cap) {
+    const cap = len + 256, grow = a => { const b = new Uint8Array(cap); b.set(a); return b; };
+    c.H = c.H.map(grow); c.C = grow(c.C); c.Bs = grow(c.Bs); c.cap = cap;
+  }
+  for (let i = Math.max(start, c.done); i < len; i++) {
+    const h = s.slice(0, i); let tot = 0;
+    for (let j = 0; j < nm; j++) { const p = F[j](h); tot += p; c.H[j][i] = ((p >= 0.5 ? "B" : "P") === s[i]) ? 1 : 0; }
+    c.C[i] = (((tot / nm) >= 0.5 ? "B" : "P") === s[i]) ? 1 : 0;
+    c.Bs[i] = s[i] === "B" ? 1 : 0;
+  }
+  c.str = str; c.done = Math.max(c.done, len);
+  const rows = NAMES.map((name, j) => { let hit = 0; for (let i = start; i < len; i++) hit += c.H[j][i]; return { name, hit }; });
+  let ch = 0, bh = 0; for (let i = start; i < len; i++) { ch += c.C[i]; bh += c.Bs[i]; }
+  const comb = { name: "รวมทุกวิธี", hit: ch }, base = { name: "แทง Banker ทุกตา (อ้างอิง)", hit: bh };
+  return { n: Math.max(0, len - start), rows: [...rows, comb, base], comb, base };
+}
+onmessage = e => { const d = e.data; if (d.model) { MODEL = d.model; modelVer++; } _minN = d.minN;
+  const pa = predictAllRaw(d.s), bt = backtestInc(d.s); postMessage({ id: d.id, sig: d.sig, pa, bt }); };`;
 }
 function sigOf(s){ const m = getAnalog(); return s.length + ":" + minN() + ":" + (m.key || "ovr") + ":" + s.join(""); }
 function heavyFor(s){
@@ -968,21 +993,34 @@ let aiPred = null; // { n, pick, prob, reason, err }
 let h2Pred = null, h2Timer = null;
 const predSrc = () => $("predSrc").value;
 const sessTok = () => { try { const ss = JSON.parse(localStorage.getItem("bacc_session") || "null"); return (ss && ss.token) || ""; } catch { return ""; } };
+let h2Abort = null, h2Wait = null, h2Tick = null;
+function h2Elapsed(){ return h2Wait ? Math.max(0, Math.round((performance.now() - h2Wait.t0) / 100) / 10) : 0; }
+function h2StopTick(){ clearInterval(h2Tick); h2Tick = null; }
 function fetchH2(){
+  if (h2Wait && h2Wait.n === data.length) return; // ตาเดียวกันกำลังรอคำตอบอยู่แล้ว ไม่ส่งซ้ำ
   clearTimeout(h2Timer);
   const n = data.length;
   h2Timer = setTimeout(async () => {
     if (n !== data.length) return;
     const tok = sessTok();
     if (!tok) { h2Pred = { n, err: "ต้องเข้าสู่ระบบสมาชิกก่อน", needLogin: true }; renderPredict(); return; }
+    if (h2Abort) h2Abort.abort();                    // ยกเลิกคำขอเก่าที่ค้างอยู่ (ตอบมาก็ไม่ได้ใช้แล้ว) จะได้ไม่ต้องรอคิวต่อกัน
+    const ac = h2Abort = new AbortController(), t0 = performance.now(); h2Wait = { n, t0 };
+    const to = setTimeout(() => { ac.timedOut = true; ac.abort(); }, 25000);
+    if (!h2Tick) h2Tick = setInterval(() => { document.querySelectorAll(".h2wait").forEach(el => { el.textContent = h2Elapsed() + " วิ"; }); }, 200);
     try {
-      const r = await fetch(location.origin + "/api/hook2", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+      const r = await fetch(location.origin + "/api/hook2", { method: "POST", signal: ac.signal, headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
         body: JSON.stringify({ event: "predict", game: GAME === "dt" ? "dragon_tiger" : "baccarat", results: nonTie(data).join("") }) });
-      const j = await r.json().catch(() => ({}));
-      h2Pred = r.ok && j.ok ? { ...j, n } : { n, err: r.status === 401 ? "ต้องเข้าสู่ระบบสมาชิกก่อน" : (j.error || "ฮุกสองตอบกลับ HTTP " + r.status), needLogin: r.status === 401 };
-    } catch { h2Pred = { n, err: "ติดต่อฮุกสองไม่ได้" }; }
+      const j = await r.json().catch(() => ({})), ms = Math.round(performance.now() - t0);
+      h2Pred = r.ok && j.ok ? { ...j, n, ms } : { n, ms, err: r.status === 401 ? "ต้องเข้าสู่ระบบสมาชิกก่อน" : (j.error || "ฮุกสองตอบกลับ HTTP " + r.status), needLogin: r.status === 401 };
+    } catch (e) {
+      if (ac.signal.aborted && !ac.timedOut) { clearTimeout(to); return; } // ถูกแทนด้วยคำขอใหม่ ไม่ต้องทำอะไร
+      h2Pred = { n, err: ac.timedOut ? "ฮุกสองตอบช้าเกิน 25 วินาที ใช้ระบบเดิมไปก่อน" : "ติดต่อฮุกสองไม่ได้" };
+    }
+    clearTimeout(to);
+    if (h2Abort === ac) { h2Abort = null; h2Wait = null; h2StopTick(); }
     if (n === data.length) renderPredict();
-  }, 350);
+  }, 150);
 }
 
 function renderPredict(){
@@ -1004,8 +1042,8 @@ function renderPredict(){
   const near = Math.abs(pBuse - 0.5) < 0.03;
   const bp = v => `<strong>B ${pc(v)}</strong> · <strong>P ${pc(1 - v)}</strong>`; // ไม่ใช้ <b> เพราะ .heroTxt b ถูกจัดเป็นบล็อกใหญ่
   const h2Line = h2ok
-    ? `${bp(h2Pred.pB)} (ไม่นับ Tie)${h2Pred.backtest ? ` · ย้อนทดสอบ ${pc(h2Pred.backtest.accuracy)} เทียบแทง Banker ทุกตา ${pc(h2Pred.backtest.baseline)} (n=${h2Pred.backtest.n})` : ""}`
-    : (h2Pred && h2Pred.n === n ? esc(h2Pred.err) : "กำลังคำนวณ…");
+    ? `${bp(h2Pred.pB)} (ไม่นับ Tie)${h2Pred.backtest ? ` · ย้อนทดสอบ ${pc(h2Pred.backtest.accuracy)} เทียบแทง Banker ทุกตา ${pc(h2Pred.backtest.baseline)} (n=${h2Pred.backtest.n})` : ""}${h2Pred.ms ? ` · ตอบใน ${(h2Pred.ms / 1000).toFixed(1)} วิ` : ""}`
+    : (h2Pred && h2Pred.n === n ? esc(h2Pred.err) : 'กำลังรอฮุกสอง… <span class="h2wait">' + h2Elapsed() + ' วิ</span>');
   const ringsHtml = () => {
     const mk = pB => pB == null ? null : { pk: pB >= 0.5 ? "B" : "P", q: pB >= 0.5 ? pB : 1 - pB };
     const L = mk(r.pB), H = h2ok ? mk(h2Pred.pB) : null;
@@ -1013,7 +1051,7 @@ function renderPredict(){
     const track = R => `<circle cx="80" cy="80" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"${R === RO && !H ? ' stroke-dasharray="4 6"' : ""}/>`;
     const arc = (R, C, d, sel) => d ? `<circle class="arc ${d.pk}${sel ? " sel" : ""}" cx="80" cy="80" r="${R}" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - d.q)).toFixed(1)}" style="--c:${C.toFixed(1)};opacity:${sel ? 1 : .45}"/>` : "";
     const tag = on => on ? " · ใช้อยู่" : "";
-    const hTxt = H ? `${H.pk} ${pc(H.q)}` : (h2Pred && h2Pred.n === n && h2Pred.err ? esc(h2Pred.err) : "กำลังคำนวณ…");
+    const hTxt = H ? `${H.pk} ${pc(H.q)}` : (h2Pred && h2Pred.n === n && h2Pred.err ? esc(h2Pred.err) : 'กำลังรอ… <span class="h2wait">' + h2Elapsed() + ' วิ</span>');
     const sw = predSrc();
     return `<div class="ringBox"><div class="hero two${play}${src ? " sel" : ""}"><svg viewBox="0 0 160 160" aria-hidden="true">${track(RO)}${track(RI)}${arc(RO, CO, H, src === "hook2")}${arc(RI, CI, L, src === "local")}</svg><span class="ball big ${pick}" aria-hidden="true">${pick}</span></div>
       <div class="gameSw srcSw" role="group" aria-label="เลือกแหล่งคาดการณ์"><button type="button" data-src="local" aria-pressed="${sw === "local"}">ระบบเดิม</button><button type="button" data-src="hook2" aria-pressed="${sw === "hook2"}">ฮุกสอง</button></div>
@@ -1442,6 +1480,11 @@ function renderBoards(){
   $("boardProg").max = target; $("boardProg").value = Math.min(n, target);
   $("fillLen").textContent = target;
   $("boardInfo").textContent = `กระดานปัจจุบัน ${n}/${target} ตา` + (n >= target ? " ครบเป้าแล้ว กด \"จบกระดาน\" ได้เลย" : "");
+  // ส่วนหนัก (รายการกระดาน/สรุป/รูปแบบ) วาดใหม่เฉพาะเมื่อกระดานเปลี่ยนจริง ไม่วาดทุกครั้งที่กดเพิ่มตา
+  let th = 0; for (const b of boards) th += b.results.length + b.name.length + b.tag.length;
+  const bsig = boards.length + "|" + th + "|" + (meta.filter || "") + "|" + (boards.length ? boards[0].id + boards[boards.length - 1].id : "") + "|" + (meta.dbMin || "") + "|" + (meta.k || 3);
+  if (bsig === renderBoards._sig) return;
+  renderBoards._sig = bsig;
   // tags
   const tags = [...new Set(boards.map(b => b.tag))].sort();
   if (meta.filter && !tags.includes(meta.filter)) meta.filter = "";
