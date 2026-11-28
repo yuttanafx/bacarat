@@ -1269,8 +1269,12 @@ async function postHook(payload){
   const url = (meta.hook || "").trim();
   if (!hookOn()) throw new Error("กรอก URL ที่ขึ้นต้นด้วย http:// หรือ https://");
   const body = JSON.stringify(payload);
+  const headers = { "Content-Type": "application/json" };
+  const viaSite = url.startsWith(location.origin + "/api/hook2");
+  if (viaSite) { try { const ss = JSON.parse(localStorage.getItem("bacc_session") || "null"); if (ss && ss.token) headers.Authorization = "Bearer " + ss.token; } catch {} }
   try {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    const r = await fetch(url, { method: "POST", headers, body });
+    if (viaSite && r.status === 401) return "ต้องเข้าสู่ระบบสมาชิกก่อนจึงจะส่งได้ (กดปุ่ม เข้าสู่ระบบ มุมขวาบน)";
     return r.ok ? `ส่งสำเร็จ (HTTP ${r.status})` : `ปลายทางตอบกลับ HTTP ${r.status}`;
   } catch {
     await fetch(url, { method: "POST", mode: "no-cors", body });
@@ -2022,7 +2026,10 @@ if (GAME === "dt") {
     document.querySelectorAll(".slotSw button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.slot === meta.slot)));
     document.querySelectorAll(".slotHint").forEach(h => { h.textContent = "ใช้อยู่: ชุด " + meta.slot; });
   };
+  const HOOK2 = () => location.origin + "/api/hook2";           // ฮุกสอง ฝังตายตัว (key อยู่ที่เซิร์ฟเวอร์)
+  const defaults = n => n === 2 ? { hook: HOOK2(), hookAuto: true, dbUrl: "", dbKey: "" } : { hook: "", hookAuto: false, dbUrl: "", dbKey: "" };
   const apply = v => {
+    if (meta.slot === 2 && !v.hook) v = { ...v, hook: HOOK2(), hookAuto: v.hookAuto || !meta.slots[2] };
     meta.hook = v.hook || ""; meta.hookAuto = !!v.hookAuto; meta.dbUrl = v.dbUrl || ""; meta.dbKey = v.dbKey || "";
     $("hookUrl").value = meta.hook; $("hookAuto").checked = meta.hookAuto; $("dbUrl").value = meta.dbUrl; $("dbKey").value = meta.dbKey;
     $("hookStatus").textContent = ""; $("dbStatus").textContent = "";
@@ -2031,10 +2038,11 @@ if (GAME === "dt") {
     if (n === meta.slot) return;
     meta.slots[meta.slot] = FIELDS();                      // เก็บค่าของชุดเดิมไว้
     meta.slot = n;
-    apply(meta.slots[n] || { hook: "", hookAuto: false, dbUrl: "", dbKey: "" }); // ชุดใหม่เริ่มว่าง ถ้ายังไม่เคยตั้ง
+    apply(meta.slots[n] || defaults(n)); // ชุด 2 ตั้ง URL ฮุกสองไว้ให้ ชุด 1 เริ่มว่าง
     saveMeta(); paint();
   };
   document.querySelectorAll(".slotSw button").forEach(b => { b.onclick = () => setSlot(+b.dataset.slot); });
+  if (meta.slot === 2 && !meta.hook) { apply(defaults(2)); saveMeta(); }
   paint();
 })();
 
